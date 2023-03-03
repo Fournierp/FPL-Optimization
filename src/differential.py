@@ -75,7 +75,8 @@ def write():
                 team_id=team_id,
                 horizon=horizon,
                 noise=False,
-                premium=True if premium=='Premium' else False)
+                premium=True if premium=='Premium' else False,
+                ownership=True)
 
             to.build_model(
                 model_name="vanilla",
