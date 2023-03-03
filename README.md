@@ -1,9 +1,3 @@
-sudo apt install python3-virtualenv
-virtualenv -p python3.10 venv3
-
-https://colab.research.google.com/drive/1izz48YWGfsK0VBnDLlki6gDVvbvHr25I?usp=sharing
-
-
 # Fantasy-Premier-League 
 
 ## Introduction
@@ -34,6 +28,8 @@ pip install -r requirements.txt
 ```{bash}
 python3 optimization/team_optimization.py
 ```
+
+An alternative is to use the Google Colab version [here](https://colab.research.google.com/drive/1izz48YWGfsK0VBnDLlki6gDVvbvHr25I?usp=sharing).
 
 ## Acknowledgements
 
