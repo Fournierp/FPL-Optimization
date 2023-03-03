@@ -23,7 +23,14 @@ from utils import (
 class Team_Optimization:
     """ Mathematical optimization of FPL """
 
-    def __init__(self, team_id=33092, horizon=5, noise=False, premium=False, ownership=False):
+    def __init__(
+            self,
+            team_id=33092,
+            horizon=5,
+            noise=False,
+            premium=False,
+            ownership=False,
+            predictions=None):
         """
 
         Args:
@@ -32,10 +39,12 @@ class Team_Optimization:
             noise (bool): Apply noise
             premium (bool, optional): Load premium data.
             ownership (bool, optional): Load ownership data.
+            predictions (pd.DataFrame): Manually provide prediction data
         """
         self.horizon = horizon
         self.premium = premium
         self.ownership = ownership
+        self.predictions = predictions
 
         season_data = get_season()
 
@@ -52,8 +61,11 @@ class Team_Optimization:
             season (int): Season
         """
         # Data collection
-        # Predicted points from https://fplreview.com/
-        df = get_predictions(premium=self.premium, season=season)
+        if self.predictions is None:
+            # Predicted points from https://fplreview.com/
+            df = get_predictions(premium=self.premium, season=season)
+        else:
+            df = self.predictions
         self.team_names = df.columns[-20:].values
         self.data = df.copy()
 
