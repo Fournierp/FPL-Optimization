@@ -711,6 +711,7 @@ class Team_Optimization:
             threshold (int): Percent after which a player is a differential
             target (str): Rank
         """
+        assert self.ownership == True, 'Cannot optimize for differential without ownership data.'
         self.data['Differential'] = np.where(
             self.data[target] < threshold, 1, 0)
         # A min numberof starter players must be differentials
