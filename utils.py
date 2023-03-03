@@ -61,11 +61,10 @@ def randomize(seed, df, start):
     return df
 
 
-def get_predictions(season, noise=False, premium=False):
+def get_predictions(season, premium=False):
     """ Load CSV file of EV Data
 
     Args:
-        noise (bool, optional): Apply noise. Defaults to False.
         premium (bool, optional): Load premium data. Defaults to False.
         season (int): Season
 
