@@ -46,7 +46,10 @@ class Team_Optimization:
         self.ownership = ownership
         self.predictions = predictions
 
-        season_data = get_season()
+        if self.predictions is None:
+            season_data = get_season()
+        else:
+            season_data = False
 
         self.get_data(team_id, season_data)
 
