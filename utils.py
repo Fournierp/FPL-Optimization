@@ -269,7 +269,8 @@ def pretty_print(
         wildcard,
         bboost,
         threexc,
-        nb_suboptimal=0):
+        nb_suboptimal=0,
+        ownership=False):
     """ Print and save model solution
 
     Args:
@@ -293,13 +294,18 @@ def pretty_print(
         bboost (so.Variable): Use bboost chip
         threexc (so.Variable): Use Threexc chip
         nb_suboptimal (int): Iteration when runing suboptimals.
+        ownership (bool, optional): Print ownership data.
     """
+
+    cols = [
+            'GW', 'Name', 'Pos', 'Team', 'SV', 'xP', 'xMins',
+            'Start', 'Bench', 'Cap', 'Vice']
+    if ownership:
+        cols =+ ['Ownership']
 
     df = pd.DataFrame(
         [],
-        columns=[
-            'GW', 'Name', 'Pos', 'Team', 'SV', 'xP', 'xMins',
-            'Start', 'Bench', 'Cap', 'Vice', 'Ownership'])
+        columns=cols)
     total_ev = 0
     chip_strat = []
 
@@ -314,8 +320,7 @@ def pretty_print(
                     else:
                         bo = [0]
 
-                    df = df.append(
-                        {
+                    df_dict = {
                             'GW': w,
                             'Name': data.loc[p]['Name'],
                             'Pos': data.loc[p]['Pos'],
@@ -326,8 +331,12 @@ def pretty_print(
                             'Start': int(starter[p, w].get_value()),
                             'Bench': int(np.argmax(bo)),
                             'Cap': int(captain[p, w].get_value()),
-                            'Vice': int(vicecaptain[p, w].get_value()),
-                            'Ownership': data.loc[p]["Top_100"]},
+                            'Vice': int(vicecaptain[p, w].get_value())}
+                    if ownership:
+                        df_dict['Ownership'] = data.loc[p]["Top_100"]
+
+                    df = df.append(
+                        df_dict,
                         ignore_index=True)
             
             else:
@@ -338,8 +347,7 @@ def pretty_print(
                     else:
                         bo = [0]
 
-                    df = df.append(
-                        {
+                    df_dict = {
                             'GW': w,
                             'Name': data.loc[p]['Name'],
                             'Pos': data.loc[p]['Pos'],
@@ -350,9 +358,14 @@ def pretty_print(
                             'Start': int(starter[p, w].get_value()),
                             'Bench': int(np.argmax(bo)),
                             'Cap': int(captain[p, w].get_value()),
-                            'Vice': int(vicecaptain[p, w].get_value()),
-                            'Ownership': data.loc[p]["Top_100"]},
-                        ignore_index=True)
+                            'Vice': int(vicecaptain[p, w].get_value())}
+                    if ownership:
+                        df_dict['Ownership'] = data.loc[p]["Top_100"]
+
+                df = df.append(
+                    df_dict,
+                    ignore_index=True)
+
             if buy[p, w].get_value():
                 print(f"Buy: {data.loc[p, 'Name']}")
             if sell[p, w].get_value():
@@ -432,7 +445,6 @@ def pretty_print(
             ascending=[True, False, True]))
     df.to_csv(f'optimization/tmp/{nb_suboptimal}.csv')
 
-    # print(df)
     print(f"EV: {total_ev:.2f}  |  Objective Val: {-objective_value:.2f}")
 
     return df, chip_strat, total_ev, -objective_value

@@ -23,7 +23,7 @@ from utils import (
 class Team_Optimization:
     """ Mathematical optimization of FPL """
 
-    def __init__(self, team_id=33092, horizon=5, noise=False, premium=False):
+    def __init__(self, team_id=33092, horizon=5, noise=False, premium=False, ownership=False):
         """
 
         Args:
@@ -31,9 +31,11 @@ class Team_Optimization:
             horizon (int): Planning horizon
             noise (bool): Apply noise
             premium (bool, optional): Load premium data.
+            ownership (bool, optional): Load ownership data.
         """
         self.horizon = horizon
         self.premium = premium
+        self.ownership = ownership
 
         season_data = get_season()
 
@@ -60,9 +62,10 @@ class Team_Optimization:
 
         if self.start != 1:
 
-            # Ownership data
-            ownership = get_ownership_data()
-            self.data = pd.concat([self.data, ownership], axis=1, join="inner")
+            if self.ownership:
+                # Ownership data
+                ownership = get_ownership_data()
+                self.data = pd.concat([self.data, ownership], axis=1, join="inner")
 
             self.initial_team, self.bank = get_team(team_id, self.start-1)
             (
