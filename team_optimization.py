@@ -1886,10 +1886,10 @@ class Team_Optimization:
             name=f'no_transfer')
 
         # Solve
-        self.model.export_mps(filename=f"optimization/tmp/{model_name}.mps")
+        self.model.export_mps(filename=f"tmp/{model_name}.mps")
         command = (
-            f'cbc optimization/tmp/{model_name}.mps solve solu ' +
-            f'optimization/tmp/{model_name}_solution.txt')
+            f'cbc tmp/{model_name}.mps solve solu ' +
+            f'tmp/{model_name}_solution.txt')
 
         process = Popen(command, shell=True, stdout=DEVNULL)
         process.wait()
@@ -1898,7 +1898,7 @@ class Team_Optimization:
         for v in self.model.get_variables():
             v.set_value(0)
 
-        with open(f'optimization/tmp/{model_name}_solution.txt', 'r') as f:
+        with open(f'tmp/{model_name}_solution.txt', 'r') as f:
             for line in f:
                 if 'objective value' in line:
                     continue
@@ -2447,10 +2447,10 @@ class Team_Optimization:
             name='hits_max')
 
         # Solve
-        self.model.export_mps(filename=f"optimization/tmp/{model_name}.mps")
+        self.model.export_mps(filename=f"tmp/{model_name}.mps")
         command = (
-            f'cbc optimization/tmp/{model_name}.mps solve solu ' +
-            f'optimization/tmp/{model_name}_solution.txt')
+            f'cbc tmp/{model_name}.mps solve solu ' +
+            f'tmp/{model_name}_solution.txt')
 
         process = Popen(command, shell=True, stdout=DEVNULL)
         process.wait()
@@ -2459,7 +2459,7 @@ class Team_Optimization:
         for v in self.model.get_variables():
             v.set_value(0)
 
-        with open(f'optimization/tmp/{model_name}_solution.txt', 'r') as f:
+        with open(f'tmp/{model_name}_solution.txt', 'r') as f:
             for line in f:
                 if 'objective value' in line:
                     continue
@@ -3001,10 +3001,10 @@ class Team_Optimization:
             name='max_ft')
 
         # Solve
-        self.model.export_mps(filename=f"optimization/tmp/{model_name}.mps")
+        self.model.export_mps(filename=f"tmp/{model_name}.mps")
         command = (
-            f'cbc optimization/tmp/{model_name}.mps solve solu ' +
-            f'optimization/tmp/{model_name}_solution.txt')
+            f'cbc tmp/{model_name}.mps solve solu ' +
+            f'tmp/{model_name}_solution.txt')
 
         process = Popen(command, shell=True, stdout=DEVNULL)
         process.wait()
@@ -3013,7 +3013,7 @@ class Team_Optimization:
         for v in self.model.get_variables():
             v.set_value(0)
 
-        with open(f'optimization/tmp/{model_name}_solution.txt', 'r') as f:
+        with open(f'tmp/{model_name}_solution.txt', 'r') as f:
             for line in f:
                 if 'objective value' in line:
                     continue
@@ -3053,11 +3053,11 @@ class Team_Optimization:
             time_lim (int): Time upper bound for the duration
                 of optimization past the initial feasible solution
         """
-        self.model.export_mps(filename=f"optimization/tmp/{model_name}.mps")
+        self.model.export_mps(filename=f"tmp/{model_name}.mps")
         if time_lim == 0:
             command = (
-                f'cbc optimization/tmp/{model_name}.mps cost column solve solu ' +
-                f'optimization/tmp/{model_name}_solution.txt')
+                f'cbc tmp/{model_name}.mps cost column solve solu ' +
+                f'tmp/{model_name}_solution.txt')
             if log:
                 os.system(command)
             else:
@@ -3066,8 +3066,8 @@ class Team_Optimization:
 
         else:
             command = (
-                f'cbc optimization/tmp/{model_name}.mps cost column ratio 1 solve solu ' +
-                f'optimization/tmp/{model_name}_solution_feasible.txt')
+                f'cbc tmp/{model_name}.mps cost column ratio 1 solve solu ' +
+                f'tmp/{model_name}_solution_feasible.txt')
             if log:
                 os.system(command)
             else:
@@ -3075,8 +3075,8 @@ class Team_Optimization:
                 process.wait()
 
             command = (
-                f'cbc optimization/tmp/{model_name}.mps mips optimization/tmp/{model_name}_solution_feasible.txt ' +
-                f'cost column sec {time_lim} solve solu optimization/tmp/{model_name}_solution.txt')
+                f'cbc tmp/{model_name}.mps mips tmp/{model_name}_solution_feasible.txt ' +
+                f'cost column sec {time_lim} solve solu tmp/{model_name}_solution.txt')
             if log:
                 os.system(command)
             else:
@@ -3087,7 +3087,7 @@ class Team_Optimization:
         for v in self.model.get_variables():
             v.set_value(0)
 
-        with open(f'optimization/tmp/{model_name}_solution.txt', 'r') as f:
+        with open(f'tmp/{model_name}_solution.txt', 'r') as f:
             for line in f:
                 if 'objective value' in line:
                     continue
@@ -3265,13 +3265,13 @@ class Team_Optimization:
                     transfer,
                     f"EV_{int(num_cols)}"] = v[2]
 
-        podium.fillna(0).to_csv("optimization/tmp/podium.csv")
-        with open("optimization/tmp/hashes.json", "w") as outfile:
+        podium.fillna(0).to_csv("tmp/podium.csv")
+        with open("tmp/hashes.json", "w") as outfile:
             json.dump(hashes, outfile)
 
 
 if __name__ == "__main__":
-    os.makedirs('optimization/tmp/', exist_ok=True)
+    os.makedirs('tmp/', exist_ok=True)
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(message)s")
     logger: logging.Logger = logging.getLogger(__name__)
