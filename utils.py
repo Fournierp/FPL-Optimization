@@ -443,7 +443,7 @@ def pretty_print(
         .sort_values(
             by=['GW', 'Start', 'Bench'],
             ascending=[True, False, True]))
-    df.to_csv(f'optimization/tmp/{nb_suboptimal}.csv')
+    df.to_csv(f'tmp/{nb_suboptimal}.csv')
 
     print(f"EV: {total_ev:.2f}  |  Objective Val: {-objective_value:.2f}")
 
