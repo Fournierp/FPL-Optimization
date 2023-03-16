@@ -97,7 +97,7 @@ def get_predictions(season, premium=False):
 
     else:
         start = get_next_gw()
-        path = f"../FPL/data/fpl_review/{season}-{season % 2000 + 1}/gameweek/{start}/fplreview_mp.csv"
+        path = f"../FPL/data/fpl_review/{season}-{season % 2000 + 1}/gameweek/{start}/fplreview_fp.csv"
         assert os.path.exists(path), "The Free Planner data is not saved in the GW folder."
         df = pd.read_csv(path)
         if df.Pos.dtype == np.int:
@@ -361,9 +361,9 @@ def pretty_print(
                     if ownership:
                         df_dict['Ownership'] = data.loc[p]["Top_100"]
 
-                df = df.append(
-                    df_dict,
-                    ignore_index=True)
+                    df = df.append(
+                        df_dict,
+                        ignore_index=True)
 
             if buy[p, w].get_value():
                 print(f"Buy: {data.loc[p, 'Name']}")
