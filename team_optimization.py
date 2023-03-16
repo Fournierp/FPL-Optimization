@@ -176,7 +176,9 @@ class Team_Optimization:
             decay_bench=[0.1, 0.1, 0.1, 0.1],
             ft_val=0,
             itb_val=0,
-            hit_val=6):
+            hit_val=6,
+            goalkeeper_max_budget=100,
+            def_stack_limit=3):
         """ Build the core of linear optimization model
 
         Args:
@@ -193,6 +195,8 @@ class Team_Optimization:
             ft_val (int): Value of rolling a transfer.
             itb_val (int): Value of having money in the bank.
             hit_val (int): Penalty of taking a hit.
+            goalkeeper_max_budget (int): Maximum amount to use on goalkeepers.
+            def_stack_limit (int): Maximum number of defender&goalkeeper from the same team.
         """
         assert (freehit_gw < self.horizon), "Select a GW within the horizon."
         assert (wildcard_gw < self.horizon), "Select a GW within the horizon."
@@ -572,6 +576,22 @@ class Team_Optimization:
                 for p in self.players for w in self.gameweeks),
             name='4.26')
 
+        self.model.add_constraints(
+            (
+                so.expr_sum(
+                    self.team_fh[p, w] * self.data.loc[p, team_name] * (self.data.loc[p, 'D'] + self.data.loc[p, 'G'])
+                    for p in self.players) <= def_stack_limit * self.freehit[w]
+                for team_name in self.team_names for w in self.gameweeks),
+            name='def_stack_limit_fh')
+
+        self.model.add_constraints(
+            (
+                so.expr_sum(
+                    self.team[p, w] * self.data.loc[p, team_name] * (self.data.loc[p, 'D'] + self.data.loc[p, 'G'])
+                    for p in self.players) <= def_stack_limit
+                for team_name in self.team_names for w in self.gameweeks),
+            name='def_stack_limit')
+
         # Captain
         # One captain (or one triple cap) must be picked once
         self.model.add_constraints(
@@ -686,6 +706,26 @@ class Team_Optimization:
                 so.expr_sum(self.sell[p, w] for p in self.players)
                 for w in self.gameweeks),
             name='equal_transfers')
+
+        goalkeeper_cost = {
+            w: so.expr_sum(
+                self.team[p, w] * self.data.loc[p, 'BV'] * self.data.loc[p, 'G'] for p in self.players)
+            for w in self.gameweeks}
+        self.model.add_constraints(
+            (
+                goalkeeper_cost[w] <= goalkeeper_max_budget
+                for w in self.gameweeks),
+            name='goalkeeper_budget')
+
+        goalkeeper_cost_fh = {
+            w: so.expr_sum(
+                self.team_fh[p, w] * self.data.loc[p, 'BV'] * self.data.loc[p, 'G'] for p in self.players)
+            for w in self.gameweeks}
+        self.model.add_constraints(
+            (
+                goalkeeper_cost_fh[w] <= goalkeeper_max_budget
+                for w in self.gameweeks),
+            name='goalkeeper_budget')
 
         # Transfers
         # The rolling transfer must be equal to the number of free
@@ -850,6 +890,8 @@ class Team_Optimization:
             ft_val=0,
             itb_val=0,
             hit_val=6,
+            goalkeeper_max_budget=100,
+            def_stack_limit=3,
             triple_val=12,
             bboost_val=14,
             freehit_val=18,
@@ -865,6 +907,8 @@ class Team_Optimization:
             ft_val (int): Value of rolling a transfer.
             itb_val (int): Value of having money in the bank.
             hit_val (int): Penalty of taking a hit.
+            goalkeeper_max_budget (int): Maximum amount to use on goalkeepers.
+            def_stack_limit (int): Maximum number of defender&goalkeeper from the same team.
             triple_val (int): Minumum expected added value of using this chip
             bboost_val (int): Minumum expected added value of using this chip
             freehit_val (int): Minumum expected added value of using this chip
@@ -1223,6 +1267,22 @@ class Team_Optimization:
                 for p in self.players for w in self.gameweeks),
             name='4.26')
 
+        self.model.add_constraints(
+            (
+                so.expr_sum(
+                    self.team_fh[p, w] * self.data.loc[p, team_name] * (self.data.loc[p, 'D'] + self.data.loc[p, 'G'])
+                    for p in self.players) <= def_stack_limit * self.freehit[w]
+                for team_name in self.team_names for w in self.gameweeks),
+            name='def_stack_limit_fh')
+
+        self.model.add_constraints(
+            (
+                so.expr_sum(
+                    self.team[p, w] * self.data.loc[p, team_name] * (self.data.loc[p, 'D'] + self.data.loc[p, 'G'])
+                    for p in self.players) <= def_stack_limit
+                for team_name in self.team_names for w in self.gameweeks),
+            name='def_stack_limit')
+
         # Captain
         # One captain (or one triple cap) must be picked once
         self.model.add_constraints(
@@ -1338,6 +1398,26 @@ class Team_Optimization:
                 for w in self.gameweeks),
             name='equal_transfers')
 
+        goalkeeper_cost = {
+            w: so.expr_sum(
+                self.team[p, w] * self.data.loc[p, 'BV'] * self.data.loc[p, 'G'] for p in self.players)
+            for w in self.gameweeks}
+        self.model.add_constraints(
+            (
+                goalkeeper_cost[w] <= goalkeeper_max_budget
+                for w in self.gameweeks),
+            name='goalkeeper_budget')
+
+        goalkeeper_cost_fh = {
+            w: so.expr_sum(
+                self.team_fh[p, w] * self.data.loc[p, 'BV'] * self.data.loc[p, 'G'] for p in self.players)
+            for w in self.gameweeks}
+        self.model.add_constraints(
+            (
+                goalkeeper_cost_fh[w] <= goalkeeper_max_budget
+                for w in self.gameweeks),
+            name='goalkeeper_budget')
+
         # Transfers
         # The rolling transfer must be equal to the number of free
         # transfers not used (+ 1)
@@ -1376,7 +1456,9 @@ class Team_Optimization:
             decay_bench=[0.1, 0.1, 0.1, 0.1],
             ft_val=0,
             itb_val=0,
-            hit_val=6):
+            hit_val=6,
+            goalkeeper_max_budget=100,
+            def_stack_limit=3):
         """ Build wildcard model for iteratively long horizon
 
         Args:
@@ -1391,6 +1473,8 @@ class Team_Optimization:
             ft_val (int): Value of rolling a transfer.
             itb_val (int): Value of having money in the bank.
             hit_val (int): Penalty of taking a hit.
+            goalkeeper_max_budget (int): Maximum amount to use on goalkeepers.
+            def_stack_limit (int): Maximum number of defender&goalkeeper from the same team.
         """
         assert (freehit_gw < self.horizon), "Select a GW within the horizon."
         assert (bboost_gw < self.horizon), "Select a GW within the horizon."
@@ -1755,6 +1839,22 @@ class Team_Optimization:
                 for p in self.players for w in self.gameweeks),
             name='4.26')
 
+        self.model.add_constraints(
+            (
+                so.expr_sum(
+                    self.team_fh[p, w] * self.data.loc[p, team_name] * (self.data.loc[p, 'D'] + self.data.loc[p, 'G'])
+                    for p in self.players) <= def_stack_limit * self.freehit[w]
+                for team_name in self.team_names for w in self.gameweeks),
+            name='def_stack_limit_fh')
+
+        self.model.add_constraints(
+            (
+                so.expr_sum(
+                    self.team[p, w] * self.data.loc[p, team_name] * (self.data.loc[p, 'D'] + self.data.loc[p, 'G'])
+                    for p in self.players) <= def_stack_limit
+                for team_name in self.team_names for w in self.gameweeks),
+            name='def_stack_limit')
+
         # Captain
         # One captain (or one triple cap) must be picked
         self.model.add_constraints(
@@ -1869,6 +1969,26 @@ class Team_Optimization:
                 so.expr_sum(self.sell[p, w] for p in self.players)
                 for w in self.gameweeks),
             name='equal_transfers')
+
+        goalkeeper_cost = {
+            w: so.expr_sum(
+                self.team[p, w] * self.data.loc[p, 'BV'] * self.data.loc[p, 'G'] for p in self.players)
+            for w in self.gameweeks}
+        self.model.add_constraints(
+            (
+                goalkeeper_cost[w] <= goalkeeper_max_budget
+                for w in self.gameweeks),
+            name='goalkeeper_budget')
+
+        goalkeeper_cost_fh = {
+            w: so.expr_sum(
+                self.team_fh[p, w] * self.data.loc[p, 'BV'] * self.data.loc[p, 'G'] for p in self.players)
+            for w in self.gameweeks}
+        self.model.add_constraints(
+            (
+                goalkeeper_cost_fh[w] <= goalkeeper_max_budget
+                for w in self.gameweeks),
+            name='goalkeeper_budget')
 
         # Transfers
         # The rolling transfer must be equal to the number of free
@@ -2316,6 +2436,22 @@ class Team_Optimization:
                 for p in self.players for w in self.gameweeks),
             name='4.26')
 
+        self.model.add_constraints(
+            (
+                so.expr_sum(
+                    self.team_fh[p, w] * self.data.loc[p, team_name] * (self.data.loc[p, 'D'] + self.data.loc[p, 'G'])
+                    for p in self.players) <= def_stack_limit * self.freehit[w]
+                for team_name in self.team_names for w in self.gameweeks),
+            name='def_stack_limit_fh')
+
+        self.model.add_constraints(
+            (
+                so.expr_sum(
+                    self.team[p, w] * self.data.loc[p, team_name] * (self.data.loc[p, 'D'] + self.data.loc[p, 'G'])
+                    for p in self.players) <= def_stack_limit
+                for team_name in self.team_names for w in self.gameweeks),
+            name='def_stack_limit')
+
         # Captain
         # One captain (or one triple cap) must be picked
         self.model.add_constraints(
@@ -2430,6 +2566,26 @@ class Team_Optimization:
                 so.expr_sum(self.sell[p, w] for p in self.players)
                 for w in self.gameweeks),
             name='equal_transfers')
+
+        goalkeeper_cost = {
+            w: so.expr_sum(
+                self.team[p, w] * self.data.loc[p, 'BV'] * self.data.loc[p, 'G'] for p in self.players)
+            for w in self.gameweeks}
+        self.model.add_constraints(
+            (
+                goalkeeper_cost[w] <= goalkeeper_max_budget
+                for w in self.gameweeks),
+            name='goalkeeper_budget')
+
+        goalkeeper_cost_fh = {
+            w: so.expr_sum(
+                self.team_fh[p, w] * self.data.loc[p, 'BV'] * self.data.loc[p, 'G'] for p in self.players)
+            for w in self.gameweeks}
+        self.model.add_constraints(
+            (
+                goalkeeper_cost_fh[w] <= goalkeeper_max_budget
+                for w in self.gameweeks),
+            name='goalkeeper_budget')
 
         # Transfers
         # The rolling transfer must be equal to the number of free
@@ -2877,6 +3033,22 @@ class Team_Optimization:
                 for p in self.players for w in self.gameweeks),
             name='4.26')
 
+        self.model.add_constraints(
+            (
+                so.expr_sum(
+                    self.team_fh[p, w] * self.data.loc[p, team_name] * (self.data.loc[p, 'D'] + self.data.loc[p, 'G'])
+                    for p in self.players) <= def_stack_limit * self.freehit[w]
+                for team_name in self.team_names for w in self.gameweeks),
+            name='def_stack_limit_fh')
+
+        self.model.add_constraints(
+            (
+                so.expr_sum(
+                    self.team[p, w] * self.data.loc[p, team_name] * (self.data.loc[p, 'D'] + self.data.loc[p, 'G'])
+                    for p in self.players) <= def_stack_limit
+                for team_name in self.team_names for w in self.gameweeks),
+            name='def_stack_limit')
+
         # Captain
         # One captain (or one triple cap) must be picked
         self.model.add_constraints(
@@ -2991,6 +3163,26 @@ class Team_Optimization:
                 so.expr_sum(self.sell[p, w] for p in self.players)
                 for w in self.gameweeks),
             name='equal_transfers')
+
+        goalkeeper_cost = {
+            w: so.expr_sum(
+                self.team[p, w] * self.data.loc[p, 'BV'] * self.data.loc[p, 'G'] for p in self.players)
+            for w in self.gameweeks}
+        self.model.add_constraints(
+            (
+                goalkeeper_cost[w] <= goalkeeper_max_budget
+                for w in self.gameweeks),
+            name='goalkeeper_budget')
+
+        goalkeeper_cost_fh = {
+            w: so.expr_sum(
+                self.team_fh[p, w] * self.data.loc[p, 'BV'] * self.data.loc[p, 'G'] for p in self.players)
+            for w in self.gameweeks}
+        self.model.add_constraints(
+            (
+                goalkeeper_cost_fh[w] <= goalkeeper_max_budget
+                for w in self.gameweeks),
+            name='goalkeeper_budget')
 
         # Transfers
         # The rolling transfer must be equal to the number of free
@@ -3305,6 +3497,8 @@ if __name__ == "__main__":
         noise=False,
         premium=True)
 
+    # BB27 FH34 - 641.9 (26)
+    # BB29 FH34 - 644.06 (26)
     to.build_model(
         model_name="vanilla",
         freehit_gw=-1,
@@ -3317,7 +3511,9 @@ if __name__ == "__main__":
         decay_bench=[0.03, 0.21, 0.06, 0.002],
         ft_val=1.1,
         itb_val=0.008,
-        hit_val=6)
+        hit_val=6,
+        goalkeeper_max_budget=10,
+        def_stack_limit=2)
 
     # to.differential_model(
     #     nb_differentials=3,
