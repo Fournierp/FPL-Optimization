@@ -713,7 +713,7 @@ class Team_Optimization:
             for w in self.gameweeks}
         self.model.add_constraints(
             (
-                goalkeeper_cost[w] <= goalkeeper_max_budget
+                goalkeeper_cost[w] <= goalkeeper_max_budget * 10
                 for w in self.gameweeks),
             name='goalkeeper_budget')
 
@@ -723,7 +723,7 @@ class Team_Optimization:
             for w in self.gameweeks}
         self.model.add_constraints(
             (
-                goalkeeper_cost_fh[w] <= goalkeeper_max_budget
+                goalkeeper_cost_fh[w] <= goalkeeper_max_budget * 10
                 for w in self.gameweeks),
             name='goalkeeper_budget_fh')
 
