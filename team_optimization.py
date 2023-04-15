@@ -195,7 +195,7 @@ class Team_Optimization:
             ft_val (int): Value of rolling a transfer.
             itb_val (int): Value of having money in the bank.
             hit_val (int): Penalty of taking a hit.
-            goalkeeper_max_budget (int): Maximum amount to use on goalkeepers.
+            goalkeeper_max_budget (int): Maximum number of millions to use on goalkeepers.
             def_stack_limit (int): Maximum number of defender&goalkeeper from the same team.
         """
         assert (freehit_gw < self.horizon), "Select a GW within the horizon."
@@ -725,7 +725,7 @@ class Team_Optimization:
             (
                 goalkeeper_cost_fh[w] <= goalkeeper_max_budget
                 for w in self.gameweeks),
-            name='goalkeeper_budget')
+            name='goalkeeper_budget_fh')
 
         # Transfers
         # The rolling transfer must be equal to the number of free
@@ -3497,8 +3497,6 @@ if __name__ == "__main__":
         noise=False,
         premium=True)
 
-    # BB27 FH34 - 641.9 (26)
-    # BB29 FH34 - 644.06 (26)
     to.build_model(
         model_name="vanilla",
         freehit_gw=-1,
