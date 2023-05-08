@@ -140,8 +140,8 @@ class Team_Optimization:
 
         # Drop players that are not predicted to play much to reduce the search space
         if self.filter_ev is not None:
-            print(f'Droped {self.data[self.data.total_ev <= .1].shape[0]} players because they have no projected points.')
-            self.data.drop(self.data[self.data.total_ev <= .1].index, inplace=True)
+            print(f'Droped {self.data[self.data.total_ev <= self.filter_ev].shape[0]} players because they have no projected points.')
+            self.data.drop(self.data[self.data.total_ev <= self.filter_ev].index, inplace=True)
         self.players = self.data.index.tolist()
 
         self.initial_team_df = pd.DataFrame(
