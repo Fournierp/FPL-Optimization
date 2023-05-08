@@ -30,7 +30,8 @@ class Team_Optimization:
             noise=False,
             premium=False,
             ownership=False,
-            predictions=None):
+            predictions=None,
+            filter_ev=None):
         """
 
         Args:
@@ -40,11 +41,13 @@ class Team_Optimization:
             premium (bool, optional): Load premium data.
             ownership (bool, optional): Load ownership data.
             predictions (pd.DataFrame): Manually provide prediction data
+            filter_ev (int): Minimum amount of EV to be considered in the planning
         """
         self.horizon = horizon
         self.premium = premium
         self.ownership = ownership
         self.predictions = predictions
+        self.filter_ev = filter_ev
 
         if self.predictions is None:
             season_data = get_season()
@@ -136,8 +139,9 @@ class Team_Optimization:
         self.data.sort_values(by=['total_ev'], ascending=[False], inplace=True)
 
         # Drop players that are not predicted to play much to reduce the search space
-        print(f'Droped {self.data[self.data.total_ev <= .1].shape[0]} players because they have no projected points.')
-        self.data.drop(self.data[self.data.total_ev <= .1].index, inplace=True)
+        if self.filter_ev is not None:
+            print(f'Droped {self.data[self.data.total_ev <= .1].shape[0]} players because they have no projected points.')
+            self.data.drop(self.data[self.data.total_ev <= .1].index, inplace=True)
         self.players = self.data.index.tolist()
 
         self.initial_team_df = pd.DataFrame(
@@ -3493,7 +3497,7 @@ if __name__ == "__main__":
 
     to = Team_Optimization(
         team_id=team_id,
-        horizon=3,
+        horizon=9,
         noise=False,
         premium=True)
 
