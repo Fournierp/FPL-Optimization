@@ -1,47 +1,41 @@
 import streamlit as st
-import awesome_streamlit as ast
 
 from src import (
-    home,
-    vanilla,
-    differential,
-    wildcard,
-    select_chips,
+    all_in_one,
     automated_chips,
     biased,
-    all_in_one,
-    sensitivity_analysis)
+    differential,
+    home,
+    select_chips,
+    sensitivity_analysis,
+    vanilla,
+    wildcard,
+)
 
-st.set_page_config(
-        page_title="FPL Optimization",
-        page_icon="chart_with_upwards_trend",
-    )
-ast.core.services.other.set_logging_format()
+st.set_page_config(page_title='FPL Optimization', page_icon='chart_with_upwards_trend')
 
-# List of pages available for display
 PAGES = {
-    "Home": home,
-    "Vanilla": vanilla,
-    "Differential": differential,
-    "Biased": biased,
-    "Wildcard": wildcard,
-    "Select Chips": select_chips,
-    "Automated Chips": automated_chips,
-    "Sensitivity Analysis": sensitivity_analysis,
-    "All In One": all_in_one,
-    }
+    'Home': home,
+    'Vanilla': vanilla,
+    'Differential': differential,
+    'Biased': biased,
+    'Wildcard': wildcard,
+    'Select Chips': select_chips,
+    'Automated Chips': automated_chips,
+    'Sensitivity Analysis': sensitivity_analysis,
+    'All In One': all_in_one,
+}
 
 
-def main():
-    """Core of the app - switches between 'tabs' thanks to the sidebar"""
-    st.sidebar.title("Navigation")
-    selection = st.sidebar.radio("Visit", list(PAGES.keys()))
+def main() -> None:
+    st.sidebar.title('Navigation')
+    selection = st.sidebar.radio('Visit', list(PAGES.keys()))
 
     page = PAGES[selection]
 
-    with st.spinner(f"Loading {selection} ..."):
-        ast.shared.components.write_page(page)
+    with st.spinner(f'Loading {selection} ...'):
+        page.write()
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()
