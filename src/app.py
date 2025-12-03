@@ -4,6 +4,7 @@ from src import (
     all_in_one,
     automated_chips,
     biased,
+    data_upload,
     differential,
     home,
     select_chips,
@@ -16,6 +17,7 @@ st.set_page_config(page_title='FPL Optimization', page_icon='chart_with_upwards_
 
 PAGES = {
     'Home': home,
+    'Data Upload': data_upload,
     'Vanilla': vanilla,
     'Differential': differential,
     'Biased': biased,
