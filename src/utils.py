@@ -337,7 +337,7 @@ def pretty_print(
                     df = df.append(
                         df_dict,
                         ignore_index=True)
-            
+
             else:
                 if team_fh[p, w].get_value():
                     if not starter[p, w].get_value():

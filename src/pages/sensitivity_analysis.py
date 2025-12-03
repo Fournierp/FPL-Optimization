@@ -647,7 +647,7 @@ def imscatter(x, y, image, ax=None, zoom=1):
     for x0, y0 in zip(x, y):
         ab = AnnotationBbox(im, (x0, y0), xycoords='data', frameon=False)
         artists.append(ax.add_artist(ab))
-        
+
     ax.update_datalim(np.column_stack([x, y]))
     ax.autoscale()
     return artists

@@ -15,7 +15,7 @@ def get_data():
     with open('info.json') as f:
         info = json.load(f)
         team_id = info['team-id']
-    
+
     to = Team_Optimization(
         team_id=team_id,
         horizon=5,

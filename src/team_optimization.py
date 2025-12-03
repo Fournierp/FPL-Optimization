@@ -101,11 +101,11 @@ class Team_Optimization:
                 self.rolling_transfer,
                 self.transfer
                 ) = get_rolling(team_id, self.start - 1)
-            
+
             self.budget = np.sum(
                 [self.data.loc[p, 'SV'] for p in self.initial_team]
                 ) + self.bank
-                
+
         else:
 
             self.initial_team, self.bank = [0 for i in range(15)], 100
@@ -2022,7 +2022,7 @@ class Team_Optimization:
             name='max_ft')
 
         # Enforce longterm planning by having no transfer past WC GW
-        # NOTE: This messes up Rolling transfer logic but it matters not 
+        # NOTE: This messes up Rolling transfer logic but it matters not
         # Since we're not using FTV in objective function.
         self.model.add_constraints(
             (so.expr_sum(self.buy[p, w] for p in self.players) == 0 for w in self.gameweeks[1:]),
