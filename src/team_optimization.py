@@ -8,7 +8,7 @@ import logging
 import json
 from concurrent.futures import ProcessPoolExecutor
 
-from utils import (
+from src.utils import (
     get_season,
     get_team,
     get_predictions,
@@ -19,6 +19,7 @@ from utils import (
     get_ownership_data,
     randomize)
 
+# TODO: rename to optimization.py
 
 class Team_Optimization:
     """ Mathematical optimization of FPL """

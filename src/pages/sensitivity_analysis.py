@@ -9,7 +9,7 @@ import matplotlib.patches as patches
 from matplotlib.offsetbox import OffsetImage, AnnotationBbox
 from highlight_text import fig_text
 
-from team_optimization import Team_Optimization
+from src.team_optimization import Team_Optimization
 
 @st.cache
 def get_data():

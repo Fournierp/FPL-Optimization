@@ -1,6 +1,6 @@
 import streamlit as st
 
-from src import (
+from src.pages import (
     all_in_one,
     automated_chips,
     biased,

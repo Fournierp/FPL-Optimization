@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import matplotlib.path as mpath
 
-from team_optimization import Team_Optimization
+from src.team_optimization import Team_Optimization
 
 
 @st.cache
