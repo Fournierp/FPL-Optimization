@@ -4,9 +4,9 @@ from src.pages import (
     all_in_one,
     automated_chips,
     biased,
-    data_upload,
     differential,
     home,
+    projection_data,
     select_chips,
     sensitivity_analysis,
     vanilla,
@@ -17,7 +17,7 @@ st.set_page_config(page_title='FPL Optimization', page_icon='chart_with_upwards_
 
 PAGES = {
     'Home': home,
-    'Data Upload': data_upload,
+    'Projection Data': projection_data,
     'Vanilla': vanilla,
     'Differential': differential,
     'Biased': biased,
