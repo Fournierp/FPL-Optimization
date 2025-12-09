@@ -124,66 +124,138 @@ def _display_full_data_tab(df: pd.DataFrame) -> None:
     st.dataframe(display_df, width='stretch', height=400)
 
 
-def _display_top_players_tab(df: pd.DataFrame) -> None:
-    st.markdown('### Top Players by Position')
+def _display_player_info(player_data: pd.Series) -> None:
+    col1, col2 = st.columns([2, 1])
+
+    with col1:
+        st.markdown('**Player Info**')
+        info_cols = ['POSITION', 'PRICE', 'TEAM']
+        cols_info = st.columns(len(info_cols))
+        for idx, col in enumerate(info_cols):
+            if col in player_data.index:
+                with cols_info[idx]:
+                    st.metric(label=col.title(), value=player_data[col])
+
+    with col2:
+        if 'in_my_team' in player_data.index and player_data['in_my_team']:
+            st.success('✓ In Your Team')
+
+
+def _display_override_inputs(player_data: pd.Series, selected_player: str, gw_columns: list) -> dict:
+    st.markdown('---')
+    st.markdown('**Override Values**')
+
+    current_overrides = st.session_state.player_overrides.get(selected_player, {})
+    override_columns = [*gw_columns]
+    cols = st.columns(len(override_columns))
+
+    new_overrides = {}
+    for idx, col_name in enumerate(override_columns):
+        with cols[idx]:
+            current_val = player_data.get(col_name, 0)
+            override_val = current_overrides.get(col_name, None)
+
+            st.caption(f'{col_name}')
+            st.text(f'Current: {current_val:.1f}')
+
+            new_val = st.number_input(
+                'Override',
+                min_value=0.0,
+                max_value=99.9,
+                value=float(override_val) if override_val is not None else float(current_val),
+                step=0.1,
+                key=f'override_{selected_player}_{col_name}',
+                label_visibility='collapsed',
+            )
+
+            if new_val != current_val:
+                new_overrides[col_name] = new_val
+
+    return new_overrides
+
+
+def _display_player_actions(selected_player: str, new_overrides: dict) -> None:
+    col_button1, col_button2 = st.columns(2)
+
+    with col_button1:
+        if st.button('✅ Confirm Overrides', type='primary', use_container_width=True):
+            if new_overrides:
+                st.session_state.player_overrides[selected_player] = new_overrides
+                st.success(f'✅ Confirmed overrides for {selected_player}')
+            else:
+                st.info('No changes detected')
+
+    with col_button2:
+        if st.button('🔄 Reset', use_container_width=True) and selected_player in st.session_state.player_overrides:
+            del st.session_state.player_overrides[selected_player]
+            st.success(f'✅ Reset overrides for {selected_player}')
+
+
+def _display_overrides_summary(df: pd.DataFrame, csv_path: Path) -> None:
+    if not st.session_state.player_overrides:
+        return
+
+    st.markdown('---')
+    st.markdown('### Current Overrides Summary')
+
+    override_summary = []
+    for player_name, overrides in st.session_state.player_overrides.items():
+        override_summary.append({'Player': player_name, 'Overridden Columns': ', '.join(overrides.keys())})
+
+    st.dataframe(pd.DataFrame(override_summary), hide_index=True, use_container_width=True)
+
+    col_action1, col_action2 = st.columns(2)
+
+    with col_action1:
+        if st.button('💾 Save to File', type='primary', use_container_width=True):
+            _apply_overrides_to_file(df, csv_path, st.session_state.player_overrides)
+            st.success('✅ Applied all overrides and saved to file!')
+            _load_projection_data.clear()
+
+    with col_action2:
+        if st.button('🗑️ Clear All Overrides', type='secondary', use_container_width=True):
+            st.session_state.player_overrides = {}
+            st.success('✅ Cleared all overrides')
+
+
+def _display_override_values_tab(df: pd.DataFrame, csv_path: Path) -> None:
+    st.markdown('### Override Player Values')
+    st.markdown('Adjust individual player projections to reflect your own analysis or information.')
 
     gw_columns = [col for col in df.columns if col.startswith('GW')]
-    if gw_columns:
-        gw_columns = sorted(gw_columns, key=lambda x: int(x[2:]))
-        next_gameweek_column = gw_columns[0]
+    gw_columns = sorted(gw_columns, key=lambda x: int(x[2:])) if gw_columns else []
 
-    sort_options = ['Total']
-    if next_gameweek_column:
-        sort_options.insert(0, next_gameweek_column)
+    if 'player_overrides' not in st.session_state:
+        st.session_state.player_overrides = {}
 
-    sort_by = st.radio(
-        'Rank players by:',
-        options=sort_options,
-        index=0 if next_gameweek_column else sort_options.index('Total'),
-        horizontal=True,
-        help=f'Select whether to rank by {next_gameweek_column} or total points across all gameweeks',
+    player_names = sorted(df['NAME'].tolist())
+    selected_player = st.selectbox(
+        'Select Player to Override',
+        options=['', *player_names],
+        help='Choose a player to modify their projected values',
     )
 
-    for position in POSSIBLE_POSITIONS:
-        st.markdown(f'#### {position}')
-        pos_df = df[df['POSITION'] == position]
+    if selected_player:
+        player_data = df[df['NAME'] == selected_player].iloc[0]
+        _display_player_info(player_data)
+        new_overrides = _display_override_inputs(player_data, selected_player, gw_columns)
+        _display_player_actions(selected_player, new_overrides)
 
-        display_columns = ['NAME', 'PRICE']
+    _display_overrides_summary(df, csv_path)
 
-        # Add FPL price if available
-        if 'fpl_price' in pos_df.columns:
-            display_columns.append('fpl_price')
 
-        # Add team-specific prices if available
-        if 'purchase_price' in pos_df.columns:
-            display_columns.extend(['purchase_price', 'selling_price'])
+def _apply_overrides_to_file(df: pd.DataFrame, csv_path: Path, overrides: dict) -> None:
+    df_modified = df.copy()
 
-        # Add gameweek and total columns
-        display_columns.extend([next_gameweek_column, 'Total', '/£M'])
+    for player_name, player_overrides in overrides.items():
+        player_idx = df_modified[df_modified['NAME'] == player_name].index
+        if len(player_idx) > 0:
+            idx = player_idx[0]
+            for col_name, new_value in player_overrides.items():
+                if col_name in df_modified.columns:
+                    df_modified.loc[idx, col_name] = new_value
 
-        # Add in_my_team indicator if available
-        if 'in_my_team' in pos_df.columns:
-            display_columns.append('in_my_team')
-
-        # Add FPL ID at the end if available
-        if 'fpl_id' in pos_df.columns:
-            display_columns.append('fpl_id')
-
-        display_columns = [col for col in display_columns if col in pos_df.columns]
-        top_players = pos_df.nlargest(5, sort_by)[display_columns]
-
-        # Highlight players in my team if data available
-        if 'in_my_team' in top_players.columns:
-
-            def highlight_my_team(row):
-                if row.get('in_my_team', False):
-                    return ['background-color: #E8F4F8'] * len(row)
-                return [''] * len(row)
-
-            styled_df = top_players.style.apply(highlight_my_team, axis=1)
-            st.dataframe(styled_df, hide_index=True, width='stretch')
-        else:
-            st.dataframe(top_players, hide_index=True, width='stretch')
+    df_modified.to_csv(csv_path, index=False)
 
 
 def _display_existing_data(csv_path: Path, next_gameweek: int | None) -> None:
@@ -200,7 +272,7 @@ def _display_existing_data(csv_path: Path, next_gameweek: int | None) -> None:
 
     df = _load_projection_data(csv_path)
 
-    tab1, tab2, tab3 = st.tabs(['📤 Upload Data', '📊 All Data', '🏆 Top Players'])
+    tab1, tab2, tab3 = st.tabs(['📤 Upload Data', '📊 All Data', '✏️ Override Values'])
 
     with tab1:
         _display_upload_tab(next_gameweek, has_existing_data=True)
@@ -209,7 +281,7 @@ def _display_existing_data(csv_path: Path, next_gameweek: int | None) -> None:
         _display_full_data_tab(df)
 
     with tab3:
-        _display_top_players_tab(df)
+        _display_override_values_tab(df, csv_path)
 
 
 def write() -> None:
