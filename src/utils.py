@@ -8,7 +8,7 @@ import os
 
 import warnings
 
-from src.data_collections import fetch_bootstrap_data
+from src.data_collection import fetch_bootstrap_data
 warnings.filterwarnings("ignore")
 
 

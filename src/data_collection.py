@@ -86,7 +86,6 @@ def match_player_names(projection_df: pd.DataFrame, team_id: int, next_gameweek:
 def get_fpl_players() -> pd.DataFrame:
     data = fetch_bootstrap_data()
 
-    teams = {team['id']: team['name'] for team in data['teams']}
     teams_short = {team['id']: team['short_name'] for team in data['teams']}
     positions = {pos['id']: pos['singular_name_short'] for pos in data['element_types']}
 
@@ -98,7 +97,6 @@ def get_fpl_players() -> pd.DataFrame:
             'first_name': player['first_name'],
             'second_name': player['second_name'],
             'full_name': f'{player["first_name"]} {player["second_name"]}',
-            'team': teams[player['team']],
             'TEAM': teams_short[player['team']],
             'position': positions[player['element_type']],
             'now_cost': player['now_cost'],

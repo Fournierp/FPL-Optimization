@@ -4,7 +4,7 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
-from src.data_collections import convert_txt_to_csv, match_player_names
+from src.data_collection import convert_txt_to_csv, match_player_names
 from src.utils import get_next_gameweek
 
 PROJECTIONS_PATH = Path('data/projections')
