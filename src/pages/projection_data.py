@@ -22,7 +22,7 @@ def _check_existing_data(next_gameweek: int | None) -> tuple[bool, Path | None]:
     if not next_gameweek:
         return False, None
 
-    csv_path = PROJECTIONS_PATH / f'expected_points_GW{next_gameweek}.csv'
+    csv_path = PROJECTIONS_PATH / f'enriched_expected_points_GW{next_gameweek}.csv'
     return csv_path.exists(), csv_path
 
 
@@ -88,29 +88,25 @@ def _apply_filters(
 ) -> pd.DataFrame:
     filtered_df = df[df['POSITION'].isin(position_filter)]
 
-    if team_filter and 'Team' in df.columns:
-        filtered_df = filtered_df[filtered_df['Team'].isin(team_filter)]
+    filtered_df = filtered_df[filtered_df['TEAM'].isin(team_filter)]
 
     return filtered_df[(filtered_df['PRICE'] >= price_range[0]) & (filtered_df['PRICE'] <= price_range[1])]
 
 
 def _display_full_data_tab(df: pd.DataFrame) -> None:
     st.markdown('### All Player Data')
+    df = df[
+        ['NAME', 'POSITION', 'TEAM', 'PRICE', 'xMins'] + [col for col in df.columns if 'GW' in col] + ['Total', '/£M']
+    ]
 
-    # Show info if team-specific data is available
-    if 'in_my_team' in df.columns:
-        my_players = df[df['in_my_team'] == True]
-        if len(my_players) > 0:
-            st.info(f'👤 Showing purchase/sell prices for {len(my_players)} players in your squad')
-
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2, col3 = st.columns([1, 2, 1])
 
     with col1:
         position_filter = st.multiselect('Filter by Position', options=POSSIBLE_POSITIONS, default=POSSIBLE_POSITIONS)
 
+    df['TEAM'] = df['TEAM'].astype(str)
     with col2:
-        # TODO: Verify 'Team' column existence
-        teams = sorted(df['Team'].unique()) if 'Team' in df.columns else []
+        teams = sorted(df['TEAM'].unique()) if 'TEAM' in df.columns else []
         team_filter = st.multiselect('Filter by Team', options=teams, default=teams) if teams else None
 
     with col3:
@@ -121,32 +117,9 @@ def _display_full_data_tab(df: pd.DataFrame) -> None:
             value=(float(df['PRICE'].min()), float(df['PRICE'].max())),
         )
 
-    with col4:
-        # Filter by my team if data available
-        if 'in_my_team' in df.columns:
-            show_my_team = st.checkbox('Only My Team', value=False)
-        else:
-            show_my_team = False
-
     filtered_df = _apply_filters(df, position_filter, team_filter, price_range)
 
-    # Apply my team filter
-    if show_my_team and 'in_my_team' in filtered_df.columns:
-        filtered_df = filtered_df[filtered_df['in_my_team'] == True]
-
-    display_df = filtered_df.sort_values('Total', ascending=False) if 'Total' in filtered_df.columns else filtered_df
-
-    # Reorder columns to show FPL data prominently if available
-    if 'fpl_id' in display_df.columns and 'fpl_price' in display_df.columns:
-        base_cols = ['NAME', 'POSITION', 'PRICE', 'fpl_price']
-
-        # Add team-specific columns if available
-        if 'purchase_price' in display_df.columns:
-            base_cols.extend(['purchase_price', 'selling_price'])
-
-        base_cols.append('fpl_id')
-        other_cols = [col for col in display_df.columns if col not in base_cols]
-        display_df = display_df[[col for col in base_cols if col in display_df.columns] + other_cols]
+    display_df = filtered_df.sort_values('Total', ascending=False)
 
     st.dataframe(display_df, width='stretch', height=400)
 

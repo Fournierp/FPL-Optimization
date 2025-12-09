@@ -70,9 +70,15 @@ def match_player_names(projection_df: pd.DataFrame, team_id: int, next_gameweek:
     team_prices = get_my_team_prices(team_id, next_gameweek)
 
     enriched_data = projection_df['NAME'].apply(lambda name: _enrich_player_data(name, fpl_df, team_prices))
-    projection_df[['fpl_id', 'fpl_price', 'purchase_price', 'selling_price', 'in_my_team']] = pd.DataFrame(
-        enriched_data.tolist()
-    )
+    enriched_columns = [
+        'fpl_id',
+        'team_id',
+        'TEAM',
+        'purchase_price',
+        'selling_price',
+        'in_my_team',
+    ]
+    projection_df[enriched_columns] = pd.DataFrame(enriched_data.tolist())
 
     return projection_df
 
@@ -81,6 +87,7 @@ def get_fpl_players() -> pd.DataFrame:
     data = fetch_bootstrap_data()
 
     teams = {team['id']: team['name'] for team in data['teams']}
+    teams_short = {team['id']: team['short_name'] for team in data['teams']}
     positions = {pos['id']: pos['singular_name_short'] for pos in data['element_types']}
 
     player_data = [
@@ -92,6 +99,7 @@ def get_fpl_players() -> pd.DataFrame:
             'second_name': player['second_name'],
             'full_name': f'{player["first_name"]} {player["second_name"]}',
             'team': teams[player['team']],
+            'TEAM': teams_short[player['team']],
             'position': positions[player['element_type']],
             'now_cost': player['now_cost'],
         }
@@ -164,13 +172,21 @@ def _enrich_player_data(projection_data_player_name: str, fpl_df: pd.DataFrame, 
     match = find_best_string_match(projection_data_player_name, fpl_df)
 
     if match is None:
-        return {'fpl_id': None, 'fpl_price': None, 'purchase_price': None, 'selling_price': None, 'in_my_team': False}
+        return {
+            'fpl_id': None,
+            'team_id': None,
+            'TEAM': None,
+            'purchase_price': None,
+            'selling_price': None,
+            'in_my_team': False,
+        }
 
     player_id = match['player_id']
     now_cost = match['now_cost'] / 10
     enriched = {
         'fpl_id': player_id,
-        'fpl_price': now_cost,
+        'team_id': match['team_id'],
+        'TEAM': match['TEAM'],
         'purchase_price': now_cost,
         'selling_price': now_cost,
         'in_my_team': False,
