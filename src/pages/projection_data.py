@@ -4,8 +4,8 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
-from src.process_projection_data import convert_txt_to_csv
-from src.utils import get_next_gw
+from src.data_collections import convert_txt_to_csv, match_player_names
+from src.utils import get_next_gameweek
 
 PROJECTIONS_PATH = Path('data/projections')
 POSSIBLE_POSITIONS = ['GK', 'DF', 'MD', 'FW']
@@ -32,7 +32,8 @@ def _display_upload_tab(next_gameweek: int | None, has_existing_data: bool) -> N
         ### How to Use
         1. Copy the Free projection data from FPL Review
         2. Paste it in the text area below
-        3. Click "Process Data" to save the data
+        3. (Optional) Change the Team ID in the sidebar settings
+        4. Click "Process Data" to save the data
         """)
 
     if has_existing_data:
@@ -48,34 +49,38 @@ def _display_upload_tab(next_gameweek: int | None, has_existing_data: bool) -> N
         Haaland\nFW 14.9\n\t88\t5.6\t6.4\t5.1\t7.0\t24.0\t0.40\t97.8%""",
     )
 
+    fpl_team_id = st.session_state.get('fpl_team_id', '')
+
     if st.button('🚀 Process Data', type='primary', width='stretch'):
-        _process_uploaded_data(projection_data, next_gameweek)
+        _process_uploaded_data(projection_data, next_gameweek, fpl_team_id)
 
 
-def _process_uploaded_data(projection_data: str, next_gameweek: int) -> None:
+def _process_uploaded_data(projection_data: str, next_gameweek: int, team_id: int | None = None) -> None:
     if not projection_data.strip():
         st.error('❌ Please paste some data before processing!')
         return
 
-    try:
-        raw_file = PROJECTIONS_PATH / f'raw_expected_points_GW{next_gameweek}.txt'
-        csv_file = PROJECTIONS_PATH / f'expected_points_GW{next_gameweek}.csv'
+    raw_file = PROJECTIONS_PATH / f'raw_expected_points_GW{next_gameweek}.txt'
+    csv_file = PROJECTIONS_PATH / f'expected_points_GW{next_gameweek}.csv'
+    enriched_file = PROJECTIONS_PATH / f'enriched_expected_points_GW{next_gameweek}.csv'
 
-        with raw_file.open('w') as f:
-            f.write(projection_data)
-        st.success(f'✅ Raw data saved to: `{raw_file}`')
+    with raw_file.open('w') as f:
+        f.write(projection_data)
+    st.success(f'✅ Raw data saved to: `{raw_file}`')
 
-        convert_txt_to_csv(str(raw_file), str(csv_file))
-        st.success(f'✅ Processed data saved to: `{csv_file}`')
+    convert_txt_to_csv(str(raw_file), str(csv_file))
+    st.success(f'✅ Projection data saved to: `{csv_file}`')
 
-        time.sleep(3)
+    with st.spinner('🔗 Matching players with FPL API...'):
+        projection_df = _load_projection_data(csv_file)
+        enriched_df = match_player_names(projection_df, team_id, next_gameweek)
+        enriched_df.to_csv(str(enriched_file), index=False)
 
-        _load_projection_data.clear()
-        st.session_state.data_uploaded = True
-        st.rerun()
+    time.sleep(2)
 
-    except Exception as e:  # noqa: BLE001
-        st.error(f'❌ Error processing data: {e}')
+    _load_projection_data.clear()
+    st.session_state.data_uploaded = True
+    st.rerun()
 
 
 def _apply_filters(
@@ -92,7 +97,13 @@ def _apply_filters(
 def _display_full_data_tab(df: pd.DataFrame) -> None:
     st.markdown('### All Player Data')
 
-    col1, col2, col3 = st.columns(3)
+    # Show info if team-specific data is available
+    if 'in_my_team' in df.columns:
+        my_players = df[df['in_my_team'] == True]
+        if len(my_players) > 0:
+            st.info(f'👤 Showing purchase/sell prices for {len(my_players)} players in your squad')
+
+    col1, col2, col3, col4 = st.columns(4)
 
     with col1:
         position_filter = st.multiselect('Filter by Position', options=POSSIBLE_POSITIONS, default=POSSIBLE_POSITIONS)
@@ -110,9 +121,33 @@ def _display_full_data_tab(df: pd.DataFrame) -> None:
             value=(float(df['PRICE'].min()), float(df['PRICE'].max())),
         )
 
+    with col4:
+        # Filter by my team if data available
+        if 'in_my_team' in df.columns:
+            show_my_team = st.checkbox('Only My Team', value=False)
+        else:
+            show_my_team = False
+
     filtered_df = _apply_filters(df, position_filter, team_filter, price_range)
 
+    # Apply my team filter
+    if show_my_team and 'in_my_team' in filtered_df.columns:
+        filtered_df = filtered_df[filtered_df['in_my_team'] == True]
+
     display_df = filtered_df.sort_values('Total', ascending=False) if 'Total' in filtered_df.columns else filtered_df
+
+    # Reorder columns to show FPL data prominently if available
+    if 'fpl_id' in display_df.columns and 'fpl_price' in display_df.columns:
+        base_cols = ['NAME', 'POSITION', 'PRICE', 'fpl_price']
+
+        # Add team-specific columns if available
+        if 'purchase_price' in display_df.columns:
+            base_cols.extend(['purchase_price', 'selling_price'])
+
+        base_cols.append('fpl_id')
+        other_cols = [col for col in display_df.columns if col not in base_cols]
+        display_df = display_df[[col for col in base_cols if col in display_df.columns] + other_cols]
+
     st.dataframe(display_df, width='stretch', height=400)
 
 
@@ -140,10 +175,42 @@ def _display_top_players_tab(df: pd.DataFrame) -> None:
         st.markdown(f'#### {position}')
         pos_df = df[df['POSITION'] == position]
 
-        display_columns = ['NAME', 'PRICE', next_gameweek_column, 'Total', '/£M']
+        display_columns = ['NAME', 'PRICE']
+
+        # Add FPL price if available
+        if 'fpl_price' in pos_df.columns:
+            display_columns.append('fpl_price')
+
+        # Add team-specific prices if available
+        if 'purchase_price' in pos_df.columns:
+            display_columns.extend(['purchase_price', 'selling_price'])
+
+        # Add gameweek and total columns
+        display_columns.extend([next_gameweek_column, 'Total', '/£M'])
+
+        # Add in_my_team indicator if available
+        if 'in_my_team' in pos_df.columns:
+            display_columns.append('in_my_team')
+
+        # Add FPL ID at the end if available
+        if 'fpl_id' in pos_df.columns:
+            display_columns.append('fpl_id')
+
         display_columns = [col for col in display_columns if col in pos_df.columns]
         top_players = pos_df.nlargest(5, sort_by)[display_columns]
-        st.dataframe(top_players, hide_index=True, width='stretch')
+
+        # Highlight players in my team if data available
+        if 'in_my_team' in top_players.columns:
+
+            def highlight_my_team(row):
+                if row.get('in_my_team', False):
+                    return ['background-color: #E8F4F8'] * len(row)
+                return [''] * len(row)
+
+            styled_df = top_players.style.apply(highlight_my_team, axis=1)
+            st.dataframe(styled_df, hide_index=True, width='stretch')
+        else:
+            st.dataframe(top_players, hide_index=True, width='stretch')
 
 
 def _display_existing_data(csv_path: Path, next_gameweek: int | None) -> None:
@@ -158,22 +225,18 @@ def _display_existing_data(csv_path: Path, next_gameweek: int | None) -> None:
     else:
         st.success(f'✅ Data available for GW{next_gameweek} & Last updated: {formatted_time}')
 
-    try:
-        df = _load_projection_data(csv_path)
+    df = _load_projection_data(csv_path)
 
-        tab1, tab2, tab3 = st.tabs(['📤 Upload Data', '📊 All Data', '🏆 Top Players'])
+    tab1, tab2, tab3 = st.tabs(['📤 Upload Data', '📊 All Data', '🏆 Top Players'])
 
-        with tab1:
-            _display_upload_tab(next_gameweek, has_existing_data=True)
+    with tab1:
+        _display_upload_tab(next_gameweek, has_existing_data=True)
 
-        with tab2:
-            _display_full_data_tab(df)
+    with tab2:
+        _display_full_data_tab(df)
 
-        with tab3:
-            _display_top_players_tab(df)
-
-    except Exception as e:  # noqa: BLE001
-        st.error(f'❌ Error loading existing data: {e}')
+    with tab3:
+        _display_top_players_tab(df)
 
 
 def write() -> None:
@@ -181,12 +244,7 @@ def write() -> None:
 
     PROJECTIONS_PATH.mkdir(parents=True, exist_ok=True)
 
-    try:
-        next_gameweek = get_next_gw()
-    except Exception as e:  # noqa: BLE001
-        st.error(f'Error fetching current gameweek: {e}')
-        next_gameweek = None
-
+    next_gameweek = get_next_gameweek()
     has_existing_data, csv_path = _check_existing_data(next_gameweek)
 
     if has_existing_data:

@@ -15,7 +15,7 @@ from src.utils import (
     get_rolling,
     pretty_print,
     get_chips,
-    get_next_gw,
+    get_next_gameweek,
     get_ownership_data,
     randomize)
 
@@ -77,7 +77,7 @@ class Team_Optimization:
         self.data = df.copy()
 
         # FPL data
-        self.start = get_next_gw()
+        self.start = get_next_gameweek()
 
         if self.start != 1:
 

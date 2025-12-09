@@ -1,3 +1,4 @@
+from pathlib import Path
 import requests
 import pandas as pd
 import numpy as np
@@ -6,7 +7,17 @@ import sasoptpy as so
 import os
 
 import warnings
+
+from data_collections import fetch_bootstrap_data
 warnings.filterwarnings("ignore")
+
+
+def load_team_id() -> dict | None:
+    info_path = Path('info.json')
+    if info_path.exists():
+        with info_path.open() as f:
+            return json.load(f)['team-id']
+    return None
 
 
 def get_team(team_id, gw):
@@ -72,7 +83,7 @@ def get_predictions(season, premium=False):
         (pd.DataFrame): EV Data
     """
     if premium:
-        start = get_next_gw()
+        start = get_next_gameweek()
         path = f"../FPL/data/fpl_review/{season}-{season % 2000 + 1}/gameweek/{start}/fplreview_mp.csv"
         assert os.path.exists(path), "The Premium Planner data is not saved in the GW folder."
         df = pd.read_csv(path)
@@ -96,7 +107,7 @@ def get_predictions(season, premium=False):
         return df.fillna(0)
 
     else:
-        start = get_next_gw()
+        start = get_next_gameweek()
         path = f"../FPL/data/fpl_review/{season}-{season % 2000 + 1}/gameweek/{start}/fplreview_fp.csv"
         assert os.path.exists(path), "The Free Planner data is not saved in the GW folder."
         df = pd.read_csv(path)
@@ -204,19 +215,13 @@ def get_chips(team_id, last_gw):
     return freehit, wildcard, bboost, threexc
 
 
-def get_next_gw():
-    """ Get the value of the next GW to be played
+def get_next_gameweek() -> int | None:
+    data = fetch_bootstrap_data()
 
-    Returns:
-        (int): GW value
-    """
-    url = 'https://fantasy.premierleague.com/api/bootstrap-static/'
-    res = requests.get(url).json()
-
-    for idx, gw in enumerate(res['events']):
-        # if not gw['finished']:
+    for idx, gw in enumerate(data['events']):
         if gw['is_next']:
             return idx + 1
+    return None
 
 
 def get_season():
@@ -237,7 +242,7 @@ def get_ownership_data():
     Returns:
         (pd.DataFrame): Ownership Data
     """
-    gw = get_next_gw() - 1
+    gw = get_next_gameweek() - 1
     season = get_season()
     df = pd.read_csv(
         f"../FPL/data/fpl_official/{season}-{season%2000+1}/gameweek/{gw}/player_ownership.csv"

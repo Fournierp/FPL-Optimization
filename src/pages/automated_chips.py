@@ -8,7 +8,7 @@ import matplotlib.patches as patches
 import matplotlib.path as mpath
 
 from src.team_optimization import Team_Optimization
-from src.utils import get_next_gw
+from src.utils import get_next_gameweek
 
 
 def write():
@@ -19,7 +19,7 @@ def write():
         """)
 
     plt.style.use(".streamlit/style.mplstyle")
-    start = get_next_gw()
+    start = get_next_gameweek()
 
     with st.expander('Parameters', expanded=True):
 
