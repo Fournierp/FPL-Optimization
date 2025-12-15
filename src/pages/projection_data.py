@@ -1,3 +1,4 @@
+import json
 import time
 from pathlib import Path
 
@@ -12,10 +13,15 @@ POSSIBLE_POSITIONS = ['GK', 'DF', 'MD', 'FW']
 
 
 @st.cache_data
-def _load_projection_data(csv_path: Path) -> pd.DataFrame:
-    df = pd.read_csv(csv_path)
+def _load_projection_data(csv_path: Path, overrides: dict | None = None) -> pd.DataFrame:
+    projection_data = pd.read_csv(csv_path)
     price_of_unpurchasable_player = 99.9
-    return df.loc[df['PRICE'] != price_of_unpurchasable_player]
+    projection_data = projection_data.loc[projection_data['PRICE'] != price_of_unpurchasable_player]
+
+    if overrides:
+        projection_data = _apply_overrides_to_dataframe(projection_data, overrides)
+
+    return projection_data
 
 
 def _check_existing_data(next_gameweek: int | None) -> tuple[bool, Path | None]:
@@ -26,14 +32,28 @@ def _check_existing_data(next_gameweek: int | None) -> tuple[bool, Path | None]:
     return csv_path.exists(), csv_path
 
 
+def _save_overrides(overrides: dict, next_gameweek: int) -> None:
+    overrides_file = PROJECTIONS_PATH / f'overrides_GW{next_gameweek}.json'
+    with overrides_file.open('w') as f:
+        json.dump(overrides, f, indent=2)
+
+
+def _load_overrides(next_gameweek: int) -> dict:
+    overrides_file = PROJECTIONS_PATH / f'overrides_GW{next_gameweek}.json'
+    if overrides_file.exists():
+        with overrides_file.open('r') as f:
+            return json.load(f)
+    return {}
+
+
 def _display_upload_tab(next_gameweek: int | None, has_existing_data: bool) -> None:  # noqa: FBT001
     with st.expander('📖 Instructions', expanded=False):
         st.markdown("""
         ### How to Use
+        (Optional) Change the Team ID in the sidebar settings
         1. Copy the Free projection data from FPL Review
         2. Paste it in the text area below
-        3. (Optional) Change the Team ID in the sidebar settings
-        4. Click "Process Data" to save the data
+        3. Click "Process Data" to save the data
         """)
 
     if has_existing_data:
@@ -72,9 +92,9 @@ def _process_uploaded_data(projection_data: str, next_gameweek: int, team_id: in
     st.success(f'✅ Projection data saved to: `{csv_file}`')
 
     with st.spinner('🔗 Matching players with FPL API...'):
-        projection_df = _load_projection_data(csv_file)
-        enriched_df = match_player_names(projection_df, team_id, next_gameweek)
-        enriched_df.to_csv(str(enriched_file), index=False)
+        projection_data = _load_projection_data(csv_file)
+        enriched_data = match_player_names(projection_data, team_id, next_gameweek)
+        enriched_data.to_csv(str(enriched_file), index=False)
 
     time.sleep(2)
 
@@ -84,19 +104,21 @@ def _process_uploaded_data(projection_data: str, next_gameweek: int, team_id: in
 
 
 def _apply_filters(
-    df: pd.DataFrame, position_filter: list, team_filter: list | None, price_range: tuple
+    projection_data: pd.DataFrame, position_filter: list, team_filter: list | None, price_range: tuple
 ) -> pd.DataFrame:
-    filtered_df = df[df['POSITION'].isin(position_filter)]
+    filtered_df = projection_data[projection_data['POSITION'].isin(position_filter)]
 
     filtered_df = filtered_df[filtered_df['TEAM'].isin(team_filter)]
 
     return filtered_df[(filtered_df['PRICE'] >= price_range[0]) & (filtered_df['PRICE'] <= price_range[1])]
 
 
-def _display_full_data_tab(df: pd.DataFrame) -> None:
+def _display_full_data_tab(projection_data: pd.DataFrame) -> None:
     st.markdown('### All Player Data')
-    df = df[
-        ['NAME', 'POSITION', 'TEAM', 'PRICE', 'xMins'] + [col for col in df.columns if 'GW' in col] + ['Total', '/£M']
+    projection_data = projection_data[
+        ['NAME', 'POSITION', 'TEAM', 'PRICE', 'xMins']
+        + [col for col in projection_data.columns if 'GW' in col]
+        + ['Total', '/£M']
     ]
 
     col1, col2, col3 = st.columns([1, 2, 1])
@@ -104,20 +126,20 @@ def _display_full_data_tab(df: pd.DataFrame) -> None:
     with col1:
         position_filter = st.multiselect('Filter by Position', options=POSSIBLE_POSITIONS, default=POSSIBLE_POSITIONS)
 
-    df['TEAM'] = df['TEAM'].astype(str)
+    projection_data['TEAM'] = projection_data['TEAM'].astype(str)
     with col2:
-        teams = sorted(df['TEAM'].unique()) if 'TEAM' in df.columns else []
+        teams = sorted(projection_data['TEAM'].unique()) if 'TEAM' in projection_data.columns else []
         team_filter = st.multiselect('Filter by Team', options=teams, default=teams) if teams else None
 
     with col3:
         price_range = st.slider(
             'Price Range (£M)',
-            min_value=float(df['PRICE'].min()),
-            max_value=float(df['PRICE'].max()),
-            value=(float(df['PRICE'].min()), float(df['PRICE'].max())),
+            min_value=float(projection_data['PRICE'].min()),
+            max_value=float(projection_data['PRICE'].max()),
+            value=(float(projection_data['PRICE'].min()), float(projection_data['PRICE'].max())),
         )
 
-    filtered_df = _apply_filters(df, position_filter, team_filter, price_range)
+    filtered_df = _apply_filters(projection_data, position_filter, team_filter, price_range)
 
     display_df = filtered_df.sort_values('Total', ascending=False)
 
@@ -191,7 +213,7 @@ def _display_player_actions(selected_player: str, new_overrides: dict) -> None:
             st.success(f'✅ Reset overrides for {selected_player}')
 
 
-def _display_overrides_summary(df: pd.DataFrame, csv_path: Path) -> None:
+def _display_overrides_summary(next_gameweek: int) -> None:
     if not st.session_state.player_overrides:
         return
 
@@ -207,28 +229,45 @@ def _display_overrides_summary(df: pd.DataFrame, csv_path: Path) -> None:
     col_action1, col_action2 = st.columns(2)
 
     with col_action1:
-        if st.button('💾 Save to File', type='primary', use_container_width=True):
-            _apply_overrides_to_file(df, csv_path, st.session_state.player_overrides)
-            st.success('✅ Applied all overrides and saved to file!')
+        if st.button('💾 Save Overrides', type='primary', use_container_width=True):
+            _save_overrides(st.session_state.player_overrides, next_gameweek)
+            st.success('✅ Saved overrides! They will be applied automatically when loading data.')
             _load_projection_data.clear()
 
     with col_action2:
         if st.button('🗑️ Clear All Overrides', type='secondary', use_container_width=True):
             st.session_state.player_overrides = {}
+            _save_overrides({}, next_gameweek)
+            _load_projection_data.clear()
             st.success('✅ Cleared all overrides')
 
 
-def _display_override_values_tab(df: pd.DataFrame, csv_path: Path) -> None:
+def _display_override_values_tab(projection_data: pd.DataFrame, next_gameweek: int) -> None:
     st.markdown('### Override Player Values')
     st.markdown('Adjust individual player projections to reflect your own analysis or information.')
 
-    gw_columns = [col for col in df.columns if col.startswith('GW')]
+    with st.expander('📖 Instructions', expanded=False):
+        st.markdown("""
+        ### How to Override Player Values
+
+        **Purpose:** Modify projected points for specific players based on your own analysis,
+        injury news, or other factors.
+
+        **Steps:**
+        1. **Select a Player** from the dropdown menu
+        2. **Adjust Values** for specific gameweeks by entering new projected points
+        3. **Confirm Overrides** to save changes for that player (not applied to the projections yet)
+        4. **Review Summary** below to see all pending overrides
+        5. **Save Overrides** to file for future sessions
+        """)
+
+    gw_columns = [col for col in projection_data.columns if col.startswith('GW')]
     gw_columns = sorted(gw_columns, key=lambda x: int(x[2:])) if gw_columns else []
 
     if 'player_overrides' not in st.session_state:
-        st.session_state.player_overrides = {}
+        st.session_state.player_overrides = _load_overrides(next_gameweek)
 
-    player_names = sorted(df['NAME'].tolist())
+    player_names = sorted(projection_data['NAME'].tolist())
     selected_player = st.selectbox(
         'Select Player to Override',
         options=['', *player_names],
@@ -236,26 +275,26 @@ def _display_override_values_tab(df: pd.DataFrame, csv_path: Path) -> None:
     )
 
     if selected_player:
-        player_data = df[df['NAME'] == selected_player].iloc[0]
+        player_data = projection_data[projection_data['NAME'] == selected_player].iloc[0]
         _display_player_info(player_data)
         new_overrides = _display_override_inputs(player_data, selected_player, gw_columns)
         _display_player_actions(selected_player, new_overrides)
 
-    _display_overrides_summary(df, csv_path)
+    _display_overrides_summary(next_gameweek)
 
 
-def _apply_overrides_to_file(df: pd.DataFrame, csv_path: Path, overrides: dict) -> None:
-    df_modified = df.copy()
+def _apply_overrides_to_dataframe(projection_data: pd.DataFrame, overrides: dict) -> pd.DataFrame:
+    projection_data_modified = projection_data.copy()
 
     for player_name, player_overrides in overrides.items():
-        player_idx = df_modified[df_modified['NAME'] == player_name].index
+        player_idx = projection_data_modified[projection_data_modified['NAME'] == player_name].index
         if len(player_idx) > 0:
             idx = player_idx[0]
             for col_name, new_value in player_overrides.items():
-                if col_name in df_modified.columns:
-                    df_modified.loc[idx, col_name] = new_value
+                if col_name in projection_data_modified.columns:
+                    projection_data_modified.loc[idx, col_name] = new_value
 
-    df_modified.to_csv(csv_path, index=False)
+    return projection_data_modified
 
 
 def _display_existing_data(csv_path: Path, next_gameweek: int | None) -> None:
@@ -270,7 +309,11 @@ def _display_existing_data(csv_path: Path, next_gameweek: int | None) -> None:
     else:
         st.success(f'✅ Data available for GW{next_gameweek} & Last updated: {formatted_time}')
 
-    df = _load_projection_data(csv_path)
+    overrides = _load_overrides(next_gameweek)
+    projection_data = _load_projection_data(csv_path, overrides)
+
+    if overrides:
+        st.info(f'ℹ️ {len(overrides)} player override(s) applied to the data')  # noqa: RUF001
 
     tab1, tab2, tab3 = st.tabs(['📤 Upload Data', '📊 All Data', '✏️ Override Values'])
 
@@ -278,10 +321,10 @@ def _display_existing_data(csv_path: Path, next_gameweek: int | None) -> None:
         _display_upload_tab(next_gameweek, has_existing_data=True)
 
     with tab2:
-        _display_full_data_tab(df)
+        _display_full_data_tab(projection_data)
 
     with tab3:
-        _display_override_values_tab(df, csv_path)
+        _display_override_values_tab(projection_data, next_gameweek)
 
 
 def write() -> None:
