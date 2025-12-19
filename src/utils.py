@@ -330,8 +330,8 @@ def pretty_print(
                             'Pos': data.loc[p]['Pos'],
                             'Team': data.loc[p]['Team'],
                             'SV': data.loc[p]['SV'],
-                            'xP': data.loc[p][str(w) + '_Pts'],
-                            'xMins': data.loc[p][str(w) + '_xMins'],
+                            'xP': data.loc[p][f'GW{w}'],
+                            'xMins': data.loc[p]['xMins'],
                             'Start': int(starter[p, w].get_value()),
                             'Bench': int(np.argmax(bo)),
                             'Cap': int(captain[p, w].get_value()),
@@ -339,7 +339,7 @@ def pretty_print(
                     if ownership:
                         df_dict['Ownership'] = data.loc[p]["Top_100"]
 
-                    df = df.append(
+                    df = df._append(
                         df_dict,
                         ignore_index=True)
 

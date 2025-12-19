@@ -221,7 +221,7 @@ def write():
                         st.write('Defenders')
                         st.dataframe(
                             percent
-                            .loc[percent.Pos == 'DEF']
+                            .loc[percent.Pos == 'DF']
                             .sort_values(
                                 by=['Appearences', 'Mean'],
                                 ascending=[False, False])
@@ -232,7 +232,7 @@ def write():
                         st.write('Midfielders')
                         st.dataframe(
                             percent
-                            .loc[percent.Pos == 'MID']
+                            .loc[percent.Pos == 'MD']
                             .sort_values(
                                 by=['Appearences', 'Mean'],
                                 ascending=[False, False])
@@ -243,7 +243,7 @@ def write():
                         st.write('Forwards')
                         st.dataframe(
                             percent
-                            .loc[percent.Pos == 'FWD']
+                            .loc[percent.Pos == 'FW']
                             .sort_values(
                                 by=['Appearences', 'Mean'],
                                 ascending=[False, False])
@@ -363,7 +363,7 @@ def write():
                     # Defender
                     df = (
                         percent
-                        .loc[percent.Pos == 'DEF']
+                        .loc[percent.Pos == 'DF']
                         .sort_values(
                             by=['Appearences', 'Mean'],
                             ascending=[False, False])
@@ -401,7 +401,7 @@ def write():
 
                     # Midfielder
                     df = (
-                        percent.loc[percent.Pos == 'MID']
+                        percent.loc[percent.Pos == 'MD']
                         .sort_values(
                             by=['Appearences', 'Mean'],
                             ascending=[False, False])
@@ -440,7 +440,7 @@ def write():
 
                     # Forward
                     df = (
-                        percent.loc[percent.Pos == 'FWD']
+                        percent.loc[percent.Pos == 'FW']
                         .sort_values(
                             by=['Appearences', 'Mean'],
                             ascending=[False, False])

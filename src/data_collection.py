@@ -69,18 +69,24 @@ def match_player_names(projection_df: pd.DataFrame, team_id: int, next_gameweek:
     fpl_df = get_fpl_players()
     team_prices = get_my_team_prices(team_id, next_gameweek)
 
-    enriched_data = projection_df['NAME'].apply(lambda name: _enrich_player_data(name, fpl_df, team_prices))
-    enriched_columns = [
-        'fpl_id',
-        'team_id',
-        'TEAM',
-        'purchase_price',
-        'selling_price',
-        'in_my_team',
-    ]
-    projection_df[enriched_columns] = pd.DataFrame(enriched_data.tolist())
+    enriched_data = projection_df.apply(
+        lambda row: _enrich_player_data(
+            row,
+            fpl_df.loc[
+                (fpl_df['position'] == row['POSITION'])
+                & (fpl_df['now_cost'].between(row['PRICE'] * 10 - 3, row['PRICE'] * 10 + 3))
+            ],
+            team_prices,
+        ),
+        axis=1,
+    )
 
-    return projection_df
+    return projection_df.merge(
+        pd.DataFrame(enriched_data.tolist()).set_index('index'),
+        left_index=True,
+        right_index=True,
+        how='left',
+    )
 
 
 def get_fpl_players() -> pd.DataFrame:
@@ -103,6 +109,15 @@ def get_fpl_players() -> pd.DataFrame:
         }
         for player in data['elements']
     ]
+    player_data = pd.DataFrame(player_data)
+    player_data['position'] = player_data['position'].map(
+        {
+            'GKP': 'GK',
+            'DEF': 'DF',
+            'MID': 'MD',
+            'FWD': 'FW',
+        }
+    )
 
     return pd.DataFrame(player_data)
 
@@ -166,11 +181,12 @@ def _calculate_selling_price(purchase_price: int, current_price: int) -> int:
     return current_price
 
 
-def _enrich_player_data(projection_data_player_name: str, fpl_df: pd.DataFrame, team_prices: dict) -> dict:
-    match = find_best_string_match(projection_data_player_name, fpl_df)
+def _enrich_player_data(projection_data_player: pd.Series, fpl_df: pd.DataFrame, team_prices: dict) -> dict:
+    match = find_best_string_match(projection_data_player['NAME'], fpl_df)
 
     if match is None:
         return {
+            'index': projection_data_player.name,
             'fpl_id': None,
             'team_id': None,
             'TEAM': None,
@@ -179,9 +195,16 @@ def _enrich_player_data(projection_data_player_name: str, fpl_df: pd.DataFrame, 
             'in_my_team': False,
         }
 
+    # Select the best matching player by price if multiple matches found
+    if isinstance(match, pd.DataFrame) and len(match) > 1:
+        now_cost = projection_data_player['PRICE']
+        match['price_diff'] = (match['now_cost'] / 10 - now_cost).abs()
+        match = match.loc[match['price_diff'].idxmin()]
+
     player_id = match['player_id']
     now_cost = match['now_cost'] / 10
     enriched = {
+        'index': projection_data_player.name,
         'fpl_id': player_id,
         'team_id': match['team_id'],
         'TEAM': match['TEAM'],

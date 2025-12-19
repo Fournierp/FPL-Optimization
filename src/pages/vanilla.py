@@ -96,7 +96,7 @@ def write():
             ax.axis('off')
             header_pos = 15.25
 
-            color_position = {'G': "#ebff00", 'D': "#00ff87", 'M': "#05f0ff", 'F': "#e90052"}
+            color_position = {'GK': "#ebff00", 'DF': "#00ff87", 'MD': "#05f0ff", 'FW': "#e90052"}
 
             for j, row in to.initial_team_df.iterrows():
                 rectangle = patches.Rectangle(
@@ -176,7 +176,7 @@ def write():
                     ls=':', lw='2.5', c='grey')
 
                 if i == 0:
-                    transfers = to.initial_team_df.append(df_gw, ignore_index=True)[['Name', 'Pos']]
+                    transfers = to.initial_team_df._append(df_gw, ignore_index=True)[['Name', 'Pos']]
                     transfers = transfers.drop_duplicates(keep=False).sort_index()
 
                     for pos in ['G', 'D', 'M', 'F']:
@@ -193,7 +193,7 @@ def write():
                                 transfer_.tail(1).index[0]])
 
                 else:
-                    transfers = df.loc[df.GW==gw-1].append(df_gw, ignore_index=True)[['Name', 'Pos']]
+                    transfers = df.loc[df.GW==gw-1]._append(df_gw, ignore_index=True)[['Name', 'Pos']]
                     transfers = transfers.drop_duplicates(keep=False).sort_index()
 
                     for pos in ['G', 'D', 'M', 'F']:
