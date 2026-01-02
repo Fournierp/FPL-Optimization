@@ -74,7 +74,7 @@ def match_player_names(projection_df: pd.DataFrame, team_id: int, next_gameweek:
             row,
             fpl_df.loc[
                 (fpl_df['position'] == row['POSITION'])
-                & (fpl_df['now_cost'].between(row['PRICE'] * 10 - 3, row['PRICE'] * 10 + 3))
+                & (fpl_df['now_cost'].between(row['PRICE'] * 10 - 2, row['PRICE'] * 10 + 2))
             ],
             team_prices,
         ),

@@ -7,6 +7,8 @@ import sasoptpy as so
 import os
 
 import warnings
+import matplotlib.path as mpath
+from matplotlib import patches
 
 from src.data_collection import fetch_bootstrap_data
 warnings.filterwarnings("ignore")
@@ -452,3 +454,32 @@ def pretty_print(
     print(f"EV: {total_ev:.2f}  |  Objective Val: {-objective_value:.2f}")
 
     return df, chip_strat, total_ev, -objective_value
+
+
+def bezier_path(p1: tuple, p2: tuple, color: str ='white') -> patches.PathPatch:
+    # TODO: The curves are not displayed on the stremlit app
+    x1, y1 = p1
+    x2, y2 = p2
+
+    if y2 != y1:
+        path_data = [
+            (mpath.Path.MOVETO, (x1, y1)),
+            (mpath.Path.CURVE3, (x1 + (x2 - x1) / 2, y1)),
+            (mpath.Path.CURVE3, (x1 + (x2 - x1) / 2, y1 + (y2 - y1) / 2)),
+            (mpath.Path.CURVE3, (x1 + (x2 - x1) / 2, y2)),
+            (mpath.Path.CURVE3, (x2, y2)),
+        ]
+        codes, verts = zip(*path_data, strict=False)
+        path = mpath.Path(verts, codes)
+        patch = patches.PathPatch(path, ec=color, fc='none', zorder=2, lw=2)
+
+    else:
+        path_data = [
+            (mpath.Path.MOVETO, (x1, y1)),
+            (mpath.Path.LINETO, (x2, y2)),
+        ]
+        codes, verts = zip(*path_data, strict=False)
+        path = mpath.Path(verts, codes)
+        patch = patches.PathPatch(path, ec=color, fc='none', zorder=2, lw=2)
+
+    return patch
