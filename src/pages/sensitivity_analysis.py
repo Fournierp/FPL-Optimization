@@ -184,13 +184,13 @@ def write():
                         ).T
 
                     # Gather data on the players in the team
-                    percent = pd.DataFrame(columns=['Player', 'Pos', 'Appearences'])
+                    percent = pd.DataFrame(columns=['Player', 'Position', 'Appearences'])
                     percent['Player'] = np.unique(freehit_teams)
                     player_pos = (
                         pd
                         .read_csv(f'data/fpl_official/vaastav/data/{season}-{season%2000+1}/cleaned_players.csv')
                         [['first_name', 'second_name', 'element_type']])
-                    percent['Pos'] = (
+                    percent['Position'] = (
                         percent['Player']
                         .apply(
                             lambda x: player_pos.loc[
@@ -210,7 +210,7 @@ def write():
                         st.write('Goalkeepers')
                         st.dataframe(
                             percent
-                            .loc[percent.Pos == 'GK']
+                            .loc[percent.Position == 'GK']
                             .sort_values(
                                 by=['Appearences', 'Mean'],
                                 ascending=[False, False])
@@ -221,7 +221,7 @@ def write():
                         st.write('Defenders')
                         st.dataframe(
                             percent
-                            .loc[percent.Pos == 'DF']
+                            .loc[percent.Position == 'DF']
                             .sort_values(
                                 by=['Appearences', 'Mean'],
                                 ascending=[False, False])
@@ -232,7 +232,7 @@ def write():
                         st.write('Midfielders')
                         st.dataframe(
                             percent
-                            .loc[percent.Pos == 'MD']
+                            .loc[percent.Position == 'MD']
                             .sort_values(
                                 by=['Appearences', 'Mean'],
                                 ascending=[False, False])
@@ -243,7 +243,7 @@ def write():
                         st.write('Forwards')
                         st.dataframe(
                             percent
-                            .loc[percent.Pos == 'FW']
+                            .loc[percent.Position == 'FW']
                             .sort_values(
                                 by=['Appearences', 'Mean'],
                                 ascending=[False, False])
@@ -325,7 +325,7 @@ def write():
                     # Goalkeeper
                     df = (
                         percent
-                        .loc[percent.Pos == 'GK']
+                        .loc[percent.Position == 'GK']
                         .sort_values(
                             by=['Appearences', 'Mean'],
                             ascending=[False, False])
@@ -363,7 +363,7 @@ def write():
                     # Defender
                     df = (
                         percent
-                        .loc[percent.Pos == 'DF']
+                        .loc[percent.Position == 'DF']
                         .sort_values(
                             by=['Appearences', 'Mean'],
                             ascending=[False, False])
@@ -401,7 +401,7 @@ def write():
 
                     # Midfielder
                     df = (
-                        percent.loc[percent.Pos == 'MD']
+                        percent.loc[percent.Position == 'MD']
                         .sort_values(
                             by=['Appearences', 'Mean'],
                             ascending=[False, False])
@@ -440,7 +440,7 @@ def write():
 
                     # Forward
                     df = (
-                        percent.loc[percent.Pos == 'FW']
+                        percent.loc[percent.Position == 'FW']
                         .sort_values(
                             by=['Appearences', 'Mean'],
                             ascending=[False, False])

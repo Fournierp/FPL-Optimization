@@ -91,8 +91,8 @@ def get_predictions(season, premium=False):
         df = pd.read_csv(path)
 
         # One hot encoded values for the constraints
-        if df.Pos.dtype == np.int:
-            df["Pos"] = df["Pos"].map(
+        if df.Position.dtype == np.int:
+            df["Position"] = df["Position"].map(
                 {
                     1: 'G',
                     2: 'D',
@@ -100,11 +100,11 @@ def get_predictions(season, premium=False):
                     4: 'F'
                 })
 
-        df = pd.concat([df, pd.get_dummies(df.Pos)], axis=1)
+        df = pd.concat([df, pd.get_dummies(df.Position)], axis=1)
         df = pd.concat([df, pd.get_dummies(df.Team)], axis=1)
         df = df.set_index('ID')
-        df.BV = df.BV*10
-        df.SV = df.SV*10
+        df.purchase_price = df.purchase_price*10
+        df.selling_price = df.selling_price*10
 
         return df.fillna(0)
 
@@ -113,8 +113,8 @@ def get_predictions(season, premium=False):
         path = f"../FPL/data/fpl_review/{season}-{season % 2000 + 1}/gameweek/{start}/fplreview_fp.csv"
         assert os.path.exists(path), "The Free Planner data is not saved in the GW folder."
         df = pd.read_csv(path)
-        if df.Pos.dtype == np.int:
-            df["Pos"] = df["Pos"].map(
+        if df.Position.dtype == np.int:
+            df["Position"] = df["Position"].map(
                 {
                     1: 'G',
                     2: 'D',
@@ -122,7 +122,7 @@ def get_predictions(season, premium=False):
                     4: 'F'
                 })
         # One hot encoded values for the constraints
-        df = pd.concat([df, pd.get_dummies(df.Pos)], axis=1)
+        df = pd.concat([df, pd.get_dummies(df.Position)], axis=1)
         df = pd.concat([df, pd.get_dummies(df.Team)], axis=1)
         df = df.set_index('ID')
 
@@ -304,7 +304,7 @@ def pretty_print(
     """
 
     cols = [
-            'GW', 'Name', 'Pos', 'Team', 'SV', 'xP', 'xMins',
+            'GW', 'Name', 'Position', 'Team', 'selling_price', 'xP', 'xMins',
             'Start', 'Bench', 'Cap', 'Vice']
     if ownership:
         cols =+ ['Ownership']
@@ -329,9 +329,9 @@ def pretty_print(
                     df_dict = {
                             'GW': w,
                             'Name': data.loc[p]['Name'],
-                            'Pos': data.loc[p]['Pos'],
+                            'Position': data.loc[p]['Position'],
                             'Team': data.loc[p]['Team'],
-                            'SV': data.loc[p]['SV'],
+                            'selling_price': data.loc[p]['selling_price'],
                             'xP': data.loc[p][f'GW{w}'],
                             'xMins': data.loc[p]['xMins'],
                             'Start': int(starter[p, w].get_value()),
@@ -356,9 +356,9 @@ def pretty_print(
                     df_dict = {
                             'GW': w,
                             'Name': data.loc[p]['Name'],
-                            'Pos': data.loc[p]['Pos'],
+                            'Position': data.loc[p]['Position'],
                             'Team': data.loc[p]['Team'],
-                            'SV': data.loc[p]['SV'],
+                            'selling_price': data.loc[p]['selling_price'],
                             'xP': data.loc[p][str(w) + '_Pts'],
                             'xMins': data.loc[p][str(w) + '_xMins'],
                             'Start': int(starter[p, w].get_value()),
@@ -419,7 +419,7 @@ def pretty_print(
             df
             .loc[df.GW == w]
             .sort_values(
-                by=['Pos'],
+                by=['Position'],
                 key=lambda x: x.map({
                     'G': 0,
                     'D': 1,
@@ -439,7 +439,7 @@ def pretty_print(
     df = (
         df
         .sort_values(
-            by=['Pos'],
+            by=['Position'],
             key=lambda x: x.map({
                 'G': 0,
                 'D': 1,

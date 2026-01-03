@@ -94,6 +94,7 @@ def _process_uploaded_data(projection_data: str, next_gameweek: int, team_id: in
     with st.spinner('🔗 Matching players with FPL API...'):
         projection_data = _load_projection_data(csv_file)
         enriched_data = match_player_names(projection_data, team_id, next_gameweek)
+        enriched_data = enriched_data.rename(columns={'NAME': 'Name', 'POSITION': 'Position'})
         enriched_data.to_csv(str(enriched_file), index=False)
 
     time.sleep(2)
@@ -106,9 +107,9 @@ def _process_uploaded_data(projection_data: str, next_gameweek: int, team_id: in
 def _apply_filters(
     projection_data: pd.DataFrame, position_filter: list, team_filter: list | None, price_range: tuple
 ) -> pd.DataFrame:
-    filtered_df = projection_data[projection_data['POSITION'].isin(position_filter)]
+    filtered_df = projection_data[projection_data['Position'].isin(position_filter)]
 
-    filtered_df = filtered_df[filtered_df['TEAM'].isin(team_filter)]
+    filtered_df = filtered_df[filtered_df['Team'].isin(team_filter)]
 
     return filtered_df[(filtered_df['PRICE'] >= price_range[0]) & (filtered_df['PRICE'] <= price_range[1])]
 
@@ -116,7 +117,7 @@ def _apply_filters(
 def _display_full_data_tab(projection_data: pd.DataFrame) -> None:
     st.markdown('### All Player Data')
     projection_data = projection_data[
-        ['NAME', 'POSITION', 'TEAM', 'PRICE', 'xMins']
+        ['Name', 'Position', 'Team', 'PRICE', 'xMins']
         + [col for col in projection_data.columns if 'GW' in col]
         + ['Total', '/£M']
     ]
@@ -126,9 +127,9 @@ def _display_full_data_tab(projection_data: pd.DataFrame) -> None:
     with col1:
         position_filter = st.multiselect('Filter by Position', options=POSSIBLE_POSITIONS, default=POSSIBLE_POSITIONS)
 
-    projection_data['TEAM'] = projection_data['TEAM'].astype(str)
+    projection_data['Team'] = projection_data['Team'].astype(str)
     with col2:
-        teams = sorted(projection_data['TEAM'].unique()) if 'TEAM' in projection_data.columns else []
+        teams = sorted(projection_data['Team'].unique()) if 'Team' in projection_data.columns else []
         team_filter = st.multiselect('Filter by Team', options=teams, default=teams) if teams else None
 
     with col3:
@@ -151,7 +152,7 @@ def _display_player_info(player_data: pd.Series) -> None:
 
     with col1:
         st.markdown('**Player Info**')
-        info_cols = ['POSITION', 'PRICE', 'TEAM']
+        info_cols = ['Position', 'PRICE', 'Team']
         cols_info = st.columns(len(info_cols))
         for idx, col in enumerate(info_cols):
             if col in player_data.index:
@@ -267,7 +268,7 @@ def _display_override_values_tab(projection_data: pd.DataFrame, next_gameweek: i
     if 'player_overrides' not in st.session_state:
         st.session_state.player_overrides = _load_overrides(next_gameweek)
 
-    player_names = sorted(projection_data['NAME'].tolist())
+    player_names = sorted(projection_data['Name'].tolist())
     selected_player = st.selectbox(
         'Select Player to Override',
         options=['', *player_names],
@@ -275,7 +276,7 @@ def _display_override_values_tab(projection_data: pd.DataFrame, next_gameweek: i
     )
 
     if selected_player:
-        player_data = projection_data[projection_data['NAME'] == selected_player].iloc[0]
+        player_data = projection_data[projection_data['Name'] == selected_player].iloc[0]
         _display_player_info(player_data)
         new_overrides = _display_override_inputs(player_data, selected_player, gw_columns)
         _display_player_actions(selected_player, new_overrides)
@@ -287,7 +288,7 @@ def _apply_overrides_to_dataframe(projection_data: pd.DataFrame, overrides: dict
     projection_data_modified = projection_data.copy()
 
     for player_name, player_overrides in overrides.items():
-        player_idx = projection_data_modified[projection_data_modified['NAME'] == player_name].index
+        player_idx = projection_data_modified[projection_data_modified['Name'] == player_name].index
         if len(player_idx) > 0:
             idx = player_idx[0]
             for col_name, new_value in player_overrides.items():

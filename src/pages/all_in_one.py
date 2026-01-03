@@ -248,7 +248,7 @@ def write():
                 rectangle = patches.Rectangle(
                     (0, 14-j),
                     12, .75,
-                    facecolor=color_position[row['Pos']])
+                    facecolor=color_position[row['Position']])
                 ax.add_patch(rectangle)
                 rx, ry = rectangle.get_xy()
                 cx = rx + rectangle.get_width()/2.0
@@ -287,7 +287,7 @@ def write():
                     rectangle = patches.Rectangle(
                         ((i+1)*16, 14-j),
                         12, .75,
-                        facecolor=color_position[row['Pos']])
+                        facecolor=color_position[row['Position']])
                     ax.add_patch(rectangle)
                     rx, ry = rectangle.get_xy()
                     cx = rx + rectangle.get_width()/2.0
@@ -322,11 +322,11 @@ def write():
                     ls=':', lw='2.5', c='grey')
 
                 if i == 0:
-                    transfers = to.initial_team_df.append(df_gw, ignore_index=True)[['Name', 'Pos']]
+                    transfers = to.initial_team_df.append(df_gw, ignore_index=True)[['Name', 'Position']]
                     transfers = transfers.drop_duplicates(keep=False).sort_index()
 
                     for pos in ['G', 'D', 'M', 'F']:
-                        transfer_ = transfers.loc[transfers.Pos==pos]
+                        transfer_ = transfers.loc[transfers.Position==pos]
 
                         for _ in range(int(transfer_.shape[0]/2)):
                             # Plot the lines
@@ -339,11 +339,11 @@ def write():
                                 transfer_.tail(1).index[0]])
 
                 else:
-                    transfers = df.loc[df.GW==gw-1].append(df_gw, ignore_index=True)[['Name', 'Pos']]
+                    transfers = df.loc[df.GW==gw-1].append(df_gw, ignore_index=True)[['Name', 'Position']]
                     transfers = transfers.drop_duplicates(keep=False).sort_index()
 
                     for pos in ['G', 'D', 'M', 'F']:
-                        transfer_ = transfers.loc[transfers.Pos==pos]
+                        transfer_ = transfers.loc[transfers.Position==pos]
 
                         for _ in range(int(transfer_.shape[0]/2)):
                             # Plot the lines
