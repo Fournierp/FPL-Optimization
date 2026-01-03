@@ -1,7 +1,7 @@
 import json
 import logging
 import os
-from concurrent.futures import ProcessPoolExecutor
+from pathlib import Path
 from subprocess import DEVNULL, Popen
 
 import numpy as np
@@ -17,8 +17,15 @@ from src.utils import (
     randomize,
 )
 
+MAX_NUMBER_GOALKEEPERS = 2
+MAX_NUMBER_DEFENDERS = 5
+MAX_NUMBER_MIDFIELDERS = 5
+MAX_NUMBER_FORWARDS = 3
+MAX_NUMBER_PLAYERS_PER_TEAM = 3
+MIN_FORMATION = {'GK': 1, 'DF': 3, 'MD': 2, 'FW': 1}
 
-class Team_Optimization:
+
+class TeamOptimization:
     def __init__(self, params: dict) -> None:
         self.filter_ev = params['filter_ev']
         self.horizon = params['horizon']
@@ -102,51 +109,44 @@ class Team_Optimization:
                 ignore_index=True,
             )
 
-    def build_model(
-        self,
-        model_name,
-        freehit_gw=-1,
-        wildcard_gw=-1,
-        bboost_gw=-1,
-        threexc_gw=-1,
-        objective_type='decay',
-        decay_gameweek=0.9,
-        vicecap_decay=0.1,
-        decay_bench=[0.1, 0.1, 0.1, 0.1],
-        ft_val=0,
-        itb_val=0,
-        hit_val=6,
-        goalkeeper_max_budget=100,
-        def_stack_limit=3,
-    ):
-        """Build the core of linear optimization model
+    def build_model(self, params: dict) -> None:  # noqa: C901, PLR0912, PLR0915
+        model_name = params.get('model_name', 'vanilla')
+        freehit_gw = params.get('freehit_gw', -1)
+        wildcard_gw = params.get('wildcard_gw', -1)
+        bboost_gw = params.get('bboost_gw', -1)
+        threexc_gw = params.get('threexc_gw', -1)
+        objective_type = params.get('objective_type', 'decay')
+        decay_gameweek = params.get('decay_gameweek', 0.9)
+        vicecap_decay = params.get('vicecap_decay', 0.1)
+        decay_bench = params.get('decay_bench', [0.1, 0.1, 0.1, 0.1])
+        ft_val = params.get('ft_val', 0)
+        itb_val = params.get('itb_val', 0)
+        hit_val = params.get('hit_val', 6)
+        goalkeeper_max_budget = params.get('goalkeeper_max_budget', 100)
+        def_stack_limit = params.get('def_stack_limit', 3)
 
-        Args:
-            model_name (string): Model name
-            freehit_gw (int): Gw to use chip in
-            wildcard_gw (int): Gw to use chip in
-            bboost_gw (int): Gw to use chip in
-            threexc_gw (int): Gw to use chip in
-            objective_type (str): Decay to apply higher importance to early GW
-                and Linear to apply uniform weights
-            decay_gameweek (float): Weight decay per gameweek
-            vicecap_decay (float): Weight applied to points scored by vice
-            decay_bench (list): Weight applied to points scored by bench.
-            ft_val (int): Value of rolling a transfer.
-            itb_val (int): Value of having money in the bank.
-            hit_val (int): Penalty of taking a hit.
-            goalkeeper_max_budget (int): Maximum number of millions to use on goalkeepers.
-            def_stack_limit (int): Maximum number of defender&goalkeeper from the same team.
-        """
-        assert freehit_gw < self.horizon, 'Select a GW within the horizon.'
-        assert wildcard_gw < self.horizon, 'Select a GW within the horizon.'
-        assert bboost_gw < self.horizon, 'Select a GW within the horizon.'
-        assert threexc_gw < self.horizon, 'Select a GW within the horizon.'
+        gw_out_of_horizon_msg = 'Select a GW within the horizon.'
+        if freehit_gw >= self.horizon:
+            raise ValueError(gw_out_of_horizon_msg)
+        if wildcard_gw >= self.horizon:
+            raise ValueError(gw_out_of_horizon_msg)
+        if bboost_gw >= self.horizon:
+            raise ValueError(gw_out_of_horizon_msg)
+        if threexc_gw >= self.horizon:
+            raise ValueError(gw_out_of_horizon_msg)
 
-        assert not (self.freehit_used and freehit_gw >= 0), 'Freehit chip was already used.'
-        assert not (self.wildcard_used and wildcard_gw >= 0), 'Wildcard chip was already used.'
-        assert not (self.bboost_used and bboost_gw >= 0), 'Bench boost chip was already used.'
-        assert not (self.threexc_used and threexc_gw >= 0), 'Tripple captain chip was already used.'
+        freehit_used_msg = 'Freehit chip was already used.'
+        if self.freehit_used and freehit_gw >= 0:
+            raise ValueError(freehit_used_msg)
+        wildcard_used_msg = 'Wildcard chip was already used.'
+        if self.wildcard_used and wildcard_gw >= 0:
+            raise ValueError(wildcard_used_msg)
+        bboost_used_msg = 'Bench boost chip was already used.'
+        if self.bboost_used and bboost_gw >= 0:
+            raise ValueError(bboost_used_msg)
+        threexc_used_msg = 'Tripple captain chip was already used.'
+        if self.threexc_used and threexc_gw >= 0:
+            raise ValueError(threexc_used_msg)
 
         # Model
         self.model = so.Model(name=model_name)
@@ -240,17 +240,17 @@ class Team_Optimization:
         # Chips
         # The chips must not be used more than once
         self.model.add_constraint(
-            so.expr_sum(self.triple[p, w] for p in self.players for w in self.gameweeks) <= --(not self.threexc_used),
+            so.expr_sum(self.triple[p, w] for p in self.players for w in self.gameweeks) <= int(not self.threexc_used),
             name='tc_once',
         )
         self.model.add_constraint(
-            so.expr_sum(self.bboost[w] for w in self.gameweeks) <= --(not self.bboost_used), name='bb_once'
+            so.expr_sum(self.bboost[w] for w in self.gameweeks) <= int(not self.bboost_used), name='bb_once'
         )
         self.model.add_constraint(
-            so.expr_sum(self.freehit[w] for w in self.gameweeks) <= --(not self.freehit_used), name='fh_once'
+            so.expr_sum(self.freehit[w] for w in self.gameweeks) <= int(not self.freehit_used), name='fh_once'
         )
         self.model.add_constraint(
-            so.expr_sum(self.wildcard[w] for w in self.gameweeks) <= --(not self.wildcard_used), name='wc_once'
+            so.expr_sum(self.wildcard[w] for w in self.gameweeks) <= int(not self.wildcard_used), name='wc_once'
         )
 
         # The chips must not be used on the same GW
@@ -297,26 +297,39 @@ class Team_Optimization:
         # The number of players must fit the requirements
         # 2 Gk, 5 Def, 5 Mid, 3 For
         self.model.add_constraints(
-            (so.expr_sum(self.team[p, w] * self.data.loc[p, 'GK'] for p in self.players) == 2 for w in self.gameweeks),
+            (
+                so.expr_sum(self.team[p, w] * self.data.loc[p, 'GK'] for p in self.players) == MAX_NUMBER_GOALKEEPERS
+                for w in self.gameweeks
+            ),
             name='gk_limit',
         )
         self.model.add_constraints(
-            (so.expr_sum(self.team[p, w] * self.data.loc[p, 'DF'] for p in self.players) == 5 for w in self.gameweeks),
+            (
+                so.expr_sum(self.team[p, w] * self.data.loc[p, 'DF'] for p in self.players) == MAX_NUMBER_DEFENDERS
+                for w in self.gameweeks
+            ),
             name='def_limit',
         )
         self.model.add_constraints(
-            (so.expr_sum(self.team[p, w] * self.data.loc[p, 'MD'] for p in self.players) == 5 for w in self.gameweeks),
+            (
+                so.expr_sum(self.team[p, w] * self.data.loc[p, 'MD'] for p in self.players) == MAX_NUMBER_MIDFIELDERS
+                for w in self.gameweeks
+            ),
             name='mid_limit',
         )
         self.model.add_constraints(
-            (so.expr_sum(self.team[p, w] * self.data.loc[p, 'FW'] for p in self.players) == 3 for w in self.gameweeks),
+            (
+                so.expr_sum(self.team[p, w] * self.data.loc[p, 'FW'] for p in self.players) == MAX_NUMBER_FORWARDS
+                for w in self.gameweeks
+            ),
             name='for_limit',
         )
 
         # The number of players from a team must exceed three
         self.model.add_constraints(
             (
-                so.expr_sum(self.team[p, w] * self.data.loc[p, team_name] for p in self.players) <= 3
+                so.expr_sum(self.team[p, w] * self.data.loc[p, team_name] for p in self.players)
+                <= MAX_NUMBER_PLAYERS_PER_TEAM
                 for team_name in self.team_names
                 for w in self.gameweeks
             ),
@@ -327,28 +340,32 @@ class Team_Optimization:
         # 2 Gk, 5 Def, 5 Mid, 3 For
         self.model.add_constraints(
             (
-                so.expr_sum(self.team_fh[p, w] * self.data.loc[p, 'GK'] for p in self.players) == 2 * self.freehit[w]
+                so.expr_sum(self.team_fh[p, w] * self.data.loc[p, 'GK'] for p in self.players)
+                == MAX_NUMBER_GOALKEEPERS * self.freehit[w]
                 for w in self.gameweeks
             ),
             name='gk_limit_fh',
         )
         self.model.add_constraints(
             (
-                so.expr_sum(self.team_fh[p, w] * self.data.loc[p, 'DF'] for p in self.players) == 5 * self.freehit[w]
+                so.expr_sum(self.team_fh[p, w] * self.data.loc[p, 'DF'] for p in self.players)
+                == MAX_NUMBER_DEFENDERS * self.freehit[w]
                 for w in self.gameweeks
             ),
             name='def_limit_fh',
         )
         self.model.add_constraints(
             (
-                so.expr_sum(self.team_fh[p, w] * self.data.loc[p, 'MD'] for p in self.players) == 5 * self.freehit[w]
+                so.expr_sum(self.team_fh[p, w] * self.data.loc[p, 'MD'] for p in self.players)
+                == MAX_NUMBER_MIDFIELDERS * self.freehit[w]
                 for w in self.gameweeks
             ),
             name='mid_limit_fh',
         )
         self.model.add_constraints(
             (
-                so.expr_sum(self.team_fh[p, w] * self.data.loc[p, 'FW'] for p in self.players) == 3 * self.freehit[w]
+                so.expr_sum(self.team_fh[p, w] * self.data.loc[p, 'FW'] for p in self.players)
+                == MAX_NUMBER_FORWARDS * self.freehit[w]
                 for w in self.gameweeks
             ),
             name='for_limit_fh',
@@ -374,28 +391,29 @@ class Team_Optimization:
         )
         self.model.add_constraints(
             (
-                so.expr_sum(self.starter[p, w] * self.data.loc[p, 'GK'] for p in self.players) == 1 + self.bboost[w]
+                so.expr_sum(self.starter[p, w] * self.data.loc[p, 'GK'] for p in self.players)
+                == MIN_FORMATION['GK'] + self.bboost[w]
                 for w in self.gameweeks
             ),
             name='gk_min',
         )
         self.model.add_constraints(
             (
-                so.expr_sum(self.starter[p, w] * self.data.loc[p, 'DF'] for p in self.players) >= 3
+                so.expr_sum(self.starter[p, w] * self.data.loc[p, 'DF'] for p in self.players) >= MIN_FORMATION['DF']
                 for w in self.gameweeks
             ),
             name='def_min',
         )
         self.model.add_constraints(
             (
-                so.expr_sum(self.starter[p, w] * self.data.loc[p, 'MD'] for p in self.players) >= 2
+                so.expr_sum(self.starter[p, w] * self.data.loc[p, 'MD'] for p in self.players) >= MIN_FORMATION['MD']
                 for w in self.gameweeks
             ),
             name='mid_min',
         )
         self.model.add_constraints(
             (
-                so.expr_sum(self.starter[p, w] * self.data.loc[p, 'FW'] for p in self.players) >= 1
+                so.expr_sum(self.starter[p, w] * self.data.loc[p, 'FW'] for p in self.players) >= MIN_FORMATION['FW']
                 for w in self.gameweeks
             ),
             name='for_min',
@@ -500,10 +518,12 @@ class Team_Optimization:
 
         # Budget
         sold_amount = {
-            w: so.expr_sum(self.sell[p, w] * self.data.loc[p, 'selling_price'] for p in self.players) for w in self.gameweeks
+            w: so.expr_sum(self.sell[p, w] * self.data.loc[p, 'selling_price'] for p in self.players)
+            for w in self.gameweeks
         }
         bought_amount = {
-            w: so.expr_sum(self.buy[p, w] * self.data.loc[p, 'purchase_price'] for p in self.players) for w in self.gameweeks
+            w: so.expr_sum(self.buy[p, w] * self.data.loc[p, 'purchase_price'] for p in self.players)
+            for w in self.gameweeks
         }
         # The cost of the squad must exceed the budget
         self.model.add_constraints(
@@ -558,7 +578,9 @@ class Team_Optimization:
         )
 
         goalkeeper_cost = {
-            w: so.expr_sum(self.team[p, w] * self.data.loc[p, 'purchase_price'] * self.data.loc[p, 'GK'] for p in self.players)
+            w: so.expr_sum(
+                self.team[p, w] * self.data.loc[p, 'purchase_price'] * self.data.loc[p, 'GK'] for p in self.players
+            )
             for w in self.gameweeks
         }
         self.model.add_constraints(
@@ -566,7 +588,9 @@ class Team_Optimization:
         )
 
         goalkeeper_cost_fh = {
-            w: so.expr_sum(self.team_fh[p, w] * self.data.loc[p, 'purchase_price'] * self.data.loc[p, 'GK'] for p in self.players)
+            w: so.expr_sum(
+                self.team_fh[p, w] * self.data.loc[p, 'purchase_price'] * self.data.loc[p, 'GK'] for p in self.players
+            )
             for w in self.gameweeks
         }
         self.model.add_constraints(
@@ -600,15 +624,7 @@ class Team_Optimization:
             name='max_ft',
         )
 
-    def differential_model(self, nb_differentials=3, threshold=10, target='Top_100K'):
-        """Build a model that select differential players
-
-        Args:
-            nb_differentials (int): Number of differential players to include
-            threshold (int): Percent after which a player is a differential
-            target (str): Rank
-        """
-        assert self.ownership == True, 'Cannot optimize for differential without ownership data.'
+    def differential_model(self, nb_differentials: int = 3, threshold: int = 10, target: str = 'Top_100K') -> None:
         self.data['Differential'] = np.where(self.data[target] < threshold, 1, 0)
         # A min numberof starter players must be differentials
         self.model.add_constraints(
@@ -620,125 +636,112 @@ class Team_Optimization:
             name='differentials',
         )
 
-    def biased_model(self, love, hate, hit_limit, two_ft_gw):
-        """Model where one can force players in and out
-
-        Args:
-            love (dict): Players to include: {(index, gw)}
-            hate (dict): Players to exclude: {(index, gw)}
-            hit_limit (dict): Number of hits: {(gw, amount)}: {(17, 5)}
-            two_ft_gw (list): GW to have 2FT. ie. the (GW-1) where a FT is rolled.
-        """
-        for bias in love:
-            if bias == 'buy' and love[bias]:
-                assert all([w in self.gameweeks for (_, w) in love['buy']]), 'Gameweek selected does not exist.'
-                assert all([bias[0] in self.players for bias in love['buy']]), 'Player selected to buy does not exist.'
+    def biased_model(self, love: dict, hate: dict, hit_limit: dict, two_ft_gw: list) -> None:  # noqa: C901, PLR0912, PLR0915
+        gw_not_exist_msg = 'Gameweek selected does not exist.'
+        player_not_exist_msg = 'Player selected to buy does not exist.'
+        for bias, bias_value in love.items():
+            if bias == 'buy' and bias_value:
+                if not all(w in self.gameweeks for (_, w) in love['buy']):
+                    raise ValueError(gw_not_exist_msg)
+                if not all(bias[0] in self.players for bias in love['buy']):
+                    raise ValueError(player_not_exist_msg)
                 # The forced-buy player must be bought
-                self.model.add_constraints((self.buy[p, w] == 1 for (p, w) in love[bias]), name='force_buy')
-            if bias == 'start' and love[bias]:
-                assert all([w in self.gameweeks for (_, w) in love['start']]), 'Gameweek selected does not exist.'
-                assert all([bias[0] in self.players for bias in love['start']]), (
-                    'Player selected to start does not exist.'
-                )
+                self.model.add_constraints((self.buy[p, w] == 1 for (p, w) in bias_value), name='force_buy')
+            if bias == 'start' and bias_value:
+                if not all(w in self.gameweeks for (_, w) in love['start']):
+                    raise ValueError(gw_not_exist_msg)
+                player_start_not_exist_msg = 'Player selected to start does not exist.'
+                if not all(bias[0] in self.players for bias in love['start']):
+                    raise ValueError(player_start_not_exist_msg)
                 # The forced-in team player must be in the team
-                self.model.add_constraints((self.team[p, w] == 1 for (p, w) in love[bias]), name='force_in')
-            if bias == 'team' and love[bias]:
-                assert all([w in self.gameweeks for (_, w) in love['team']]), 'Gameweek selected does not exist.'
-                assert all([bias[0] in self.players for bias in love['team']]), (
-                    'Player selected to be in the team does not exist.'
-                )
+                self.model.add_constraints((self.team[p, w] == 1 for (p, w) in bias_value), name='force_in')
+            if bias == 'team' and bias_value:
+                if not all(w in self.gameweeks for (_, w) in love['team']):
+                    raise ValueError(gw_not_exist_msg)
+                player_team_not_exist_msg = 'Player selected to be in the team does not exist.'
+                if not all(bias[0] in self.players for bias in love['team']):
+                    raise ValueError(player_team_not_exist_msg)
                 # The forced-in starter player must be a starter
-                self.model.add_constraints((self.starter[p, w] == 1 for (p, w) in love[bias]), name='force_starter')
-            if bias == 'cap' and love[bias]:
-                assert all([w in self.gameweeks for (_, w) in love['cap']]), 'Gameweek selected does not exist.'
-                assert all([bias[0] in self.players for bias in love['cap']]), (
-                    'Player selected to be the captain does not exist.'
-                )
+                self.model.add_constraints((self.starter[p, w] == 1 for (p, w) in bias_value), name='force_starter')
+            if bias == 'cap' and bias_value:
+                if not all(w in self.gameweeks for (_, w) in love['cap']):
+                    raise ValueError(gw_not_exist_msg)
+                player_cap_not_exist_msg = 'Player selected to be the captain does not exist.'
+                if not all(bias[0] in self.players for bias in love['cap']):
+                    raise ValueError(player_cap_not_exist_msg)
                 # The forced-in cap player must be the captain
-                self.model.add_constraints((self.captain[p, w] == 1 for (p, w) in love[bias]), name='force_captain')
+                self.model.add_constraints((self.captain[p, w] == 1 for (p, w) in bias_value), name='force_captain')
 
-        for bias in hate:
-            if bias == 'sell' and hate[bias]:
-                assert all([w in self.gameweeks for (_, w) in hate['sell']]), 'Gameweek selected does not exist.'
-                assert all([bias[0] in self.players for bias in hate['sell']]), (
-                    'Player selected to sell does not exist.'
-                )
+        for bias, bias_value in hate.items():
+            if bias == 'sell' and bias_value:
+                if not all(w in self.gameweeks for (_, w) in hate['sell']):
+                    raise ValueError(gw_not_exist_msg)
+                player_sell_not_exist_msg = 'Player selected to sell does not exist.'
+                if not all(bias[0] in self.players for bias in hate['sell']):
+                    raise ValueError(player_sell_not_exist_msg)
                 # The forced-out player must be sold
-                self.model.add_constraints((self.sell[p, w] == 1 for (p, w) in hate[bias]), name='force_sell')
-            if bias == 'bench' and hate[bias]:
-                assert all([w in self.gameweeks for (_, w) in hate['bench']]), 'Gameweek selected does not exist.'
-                assert all([bias[0] in self.players for bias in hate['bench']]), (
-                    'Player selected to start does not exist.'
-                )
+                self.model.add_constraints((self.sell[p, w] == 1 for (p, w) in bias_value), name='force_sell')
+            if bias == 'bench' and bias_value:
+                if not all(w in self.gameweeks for (_, w) in hate['bench']):
+                    raise ValueError(gw_not_exist_msg)
+                if not all(bias[0] in self.players for bias in hate['bench']):
+                    raise ValueError(player_start_not_exist_msg)
                 # The forced-out of starter player must not be starting
                 self.model.add_constraints(
-                    (self.starter[p, w] == 0 for (p, w) in hate[bias]), name='force_bench'
+                    (self.starter[p, w] == 0 for (p, w) in bias_value), name='force_bench'
                 )  # Force player out by a certain gw
-            if bias == 'team' and hate[bias]:
-                assert all([w in self.gameweeks for (_, w) in hate['team']]), 'Gameweek selected does not exist.'
-                assert all([bias[0] in self.players for bias in hate['team']]), (
-                    'Player selected to be out of the team does not exist.'
-                )
+            if bias == 'team' and bias_value:
+                if not all(w in self.gameweeks for (_, w) in hate['team']):
+                    raise ValueError(gw_not_exist_msg)
+                player_out_team_msg = 'Player selected to be out of the team does not exist.'
+                if not all(bias[0] in self.players for bias in hate['team']):
+                    raise ValueError(player_out_team_msg)
                 # The forced-out of team player must not be in team
-                self.model.add_constraints((self.team[p, w] == 0 for (p, w) in hate[bias]), name='force_out')
+                self.model.add_constraints((self.team[p, w] == 0 for (p, w) in bias_value), name='force_out')
 
-        for bias in hit_limit:
+        for bias in hit_limit:  # noqa: PLC0206
             if bias == 'max' and hit_limit[bias]:
-                assert all([w in self.gameweeks for (w, _) in hit_limit['max']]), 'Gameweek selected does not exist.'
+                if not all(w in self.gameweeks for (w, _) in hit_limit['max']):
+                    raise ValueError(gw_not_exist_msg)
                 # The number of hits under the maximum
                 self.model.add_constraints(
                     (self.hits[w] <= max_hit for (w, max_hit) in hit_limit[bias]), name='hits_max'
                 )
             if bias == 'eq' and hit_limit[bias]:
-                assert all([w in self.gameweeks for (w, _) in hit_limit['eq']]), 'Gameweek selected does not exist.'
+                if not all(w in self.gameweeks for (w, _) in hit_limit['eq']):
+                    raise ValueError(gw_not_exist_msg)
                 # The number of hits equal to the choice
                 self.model.add_constraints((self.hits[w] == nb_hit for (w, nb_hit) in hit_limit[bias]), name='hits_eq')
             if bias == 'min' and hit_limit[bias]:
-                assert all([w in self.gameweeks for (w, _) in hit_limit['min']]), 'Gameweek selected does not exist.'
+                if not all(w in self.gameweeks for (w, _) in hit_limit['min']):
+                    raise ValueError(gw_not_exist_msg)
                 # The number of hits above the minumum
                 self.model.add_constraints(
                     (self.hits[w] >= min_hit for (w, min_hit) in hit_limit[bias]), name='hits_min'
                 )
 
         for gw in two_ft_gw:
-            assert gw > self.start and gw <= self.start + self.horizon, 'Gameweek selected cannot be constrained.'
+            if not (gw > self.start and gw <= self.start + self.horizon):
+                raise ValueError(gw_not_exist_msg)
             # Force rolling free transfer
-            self.model.add_constraint(self.free_transfers[gw] == 2, name=f'force_roll_{gw}')
+            max_rolled_free_transfers = 2
+            self.model.add_constraint(self.free_transfers[gw] == max_rolled_free_transfers, name=f'force_roll_{gw}')
 
-    def automated_chips_model(
-        self,
-        objective_type='decay',
-        decay_gameweek=0.9,
-        vicecap_decay=0.1,
-        decay_bench=[0.1, 0.1, 0.1, 0.1],
-        ft_val=0,
-        itb_val=0,
-        hit_val=6,
-        goalkeeper_max_budget=100,
-        def_stack_limit=3,
-        triple_val=12,
-        bboost_val=14,
-        freehit_val=18,
-        wildcard_val=18,
-    ):
-        """Build wildcard model for iteratively long horizon
-
-        Args:
-            objective_type (str): Decay to apply higher importance to early GW
-                and Linear to apply uniform weights
-            decay_gameweek (float): Weight decay per gameweek
-            vicecap_decay (float): Weight applied to points scored by vice
-            decay_bench (list): Weight applied to points scored by bench.
-            ft_val (int): Value of rolling a transfer.
-            itb_val (int): Value of having money in the bank.
-            hit_val (int): Penalty of taking a hit.
-            goalkeeper_max_budget (int): Maximum amount to use on goalkeepers.
-            def_stack_limit (int): Maximum number of defender&goalkeeper from the same team.
-            triple_val (int): Minumum expected added value of using this chip
-            bboost_val (int): Minumum expected added value of using this chip
-            freehit_val (int): Minumum expected added value of using this chip
-            wildcard_val (int): Minumum expected added value of using this chip
-        """
+    def automated_chips_model(self, params: dict) -> None:  # noqa: PLR0915
+        # Extract parameters with defaults
+        objective_type = params.get('objective_type', 'decay')
+        decay_gameweek = params.get('decay_gameweek', 0.9)
+        vicecap_decay = params.get('vicecap_decay', 0.1)
+        decay_bench = params.get('decay_bench', [0.1, 0.1, 0.1, 0.1])
+        ft_val = params.get('ft_val', 0)
+        itb_val = params.get('itb_val', 0)
+        hit_val = params.get('hit_val', 6)
+        goalkeeper_max_budget = params.get('goalkeeper_max_budget', 100)
+        def_stack_limit = params.get('def_stack_limit', 3)
+        triple_val = params.get('triple_val', 12)
+        bboost_val = params.get('bboost_val', 14)
+        freehit_val = params.get('freehit_val', 18)
+        wildcard_val = params.get('wildcard_val', 18)
         # Model
         self.model = so.Model(name='auto_chips_model')
 
@@ -868,17 +871,17 @@ class Team_Optimization:
         # Chips
         # The chips must not be used more than once
         self.model.add_constraint(
-            so.expr_sum(self.triple[p, w] for p in self.players for w in self.gameweeks) <= --(not self.threexc_used),
+            so.expr_sum(self.triple[p, w] for p in self.players for w in self.gameweeks) <= int(not self.threexc_used),
             name='tc_once',
         )
         self.model.add_constraint(
-            so.expr_sum(self.bboost[w] for w in self.gameweeks) <= --(not self.bboost_used), name='bb_once'
+            so.expr_sum(self.bboost[w] for w in self.gameweeks) <= int(not self.bboost_used), name='bb_once'
         )
         self.model.add_constraint(
-            so.expr_sum(self.freehit[w] for w in self.gameweeks) <= --(not self.freehit_used), name='fh_once'
+            so.expr_sum(self.freehit[w] for w in self.gameweeks) <= int(not self.freehit_used), name='fh_once'
         )
         self.model.add_constraint(
-            so.expr_sum(self.wildcard[w] for w in self.gameweeks) <= --(not self.wildcard_used), name='wc_once'
+            so.expr_sum(self.wildcard[w] for w in self.gameweeks) <= int(not self.wildcard_used), name='wc_once'
         )
 
         # The chips must not be used on the same GW
@@ -898,26 +901,39 @@ class Team_Optimization:
         # The number of players must fit the requirements
         # 2 Gk, 5 Def, 5 Mid, 3 For
         self.model.add_constraints(
-            (so.expr_sum(self.team[p, w] * self.data.loc[p, 'GK'] for p in self.players) == 2 for w in self.gameweeks),
+            (
+                so.expr_sum(self.team[p, w] * self.data.loc[p, 'GK'] for p in self.players) == MAX_NUMBER_GOALKEEPERS
+                for w in self.gameweeks
+            ),
             name='gk_limit',
         )
         self.model.add_constraints(
-            (so.expr_sum(self.team[p, w] * self.data.loc[p, 'DF'] for p in self.players) == 5 for w in self.gameweeks),
+            (
+                so.expr_sum(self.team[p, w] * self.data.loc[p, 'DF'] for p in self.players) == MAX_NUMBER_DEFENDERS
+                for w in self.gameweeks
+            ),
             name='def_limit',
         )
         self.model.add_constraints(
-            (so.expr_sum(self.team[p, w] * self.data.loc[p, 'MD'] for p in self.players) == 5 for w in self.gameweeks),
+            (
+                so.expr_sum(self.team[p, w] * self.data.loc[p, 'MD'] for p in self.players) == MAX_NUMBER_MIDFIELDERS
+                for w in self.gameweeks
+            ),
             name='mid_limit',
         )
         self.model.add_constraints(
-            (so.expr_sum(self.team[p, w] * self.data.loc[p, 'FW'] for p in self.players) == 3 for w in self.gameweeks),
+            (
+                so.expr_sum(self.team[p, w] * self.data.loc[p, 'FW'] for p in self.players) == MAX_NUMBER_FORWARDS
+                for w in self.gameweeks
+            ),
             name='for_limit',
         )
 
         # The number of players from a team must exceed three
         self.model.add_constraints(
             (
-                so.expr_sum(self.team[p, w] * self.data.loc[p, team_name] for p in self.players) <= 3
+                so.expr_sum(self.team[p, w] * self.data.loc[p, team_name] for p in self.players)
+                <= MAX_NUMBER_PLAYERS_PER_TEAM
                 for team_name in self.team_names
                 for w in self.gameweeks
             ),
@@ -928,28 +944,32 @@ class Team_Optimization:
         # 2 Gk, 5 Def, 5 Mid, 3 For
         self.model.add_constraints(
             (
-                so.expr_sum(self.team_fh[p, w] * self.data.loc[p, 'GK'] for p in self.players) == 2 * self.freehit[w]
+                so.expr_sum(self.team_fh[p, w] * self.data.loc[p, 'GK'] for p in self.players)
+                == MAX_NUMBER_GOALKEEPERS * self.freehit[w]
                 for w in self.gameweeks
             ),
             name='gk_limit_fh',
         )
         self.model.add_constraints(
             (
-                so.expr_sum(self.team_fh[p, w] * self.data.loc[p, 'DF'] for p in self.players) == 5 * self.freehit[w]
+                so.expr_sum(self.team_fh[p, w] * self.data.loc[p, 'DF'] for p in self.players)
+                == MAX_NUMBER_DEFENDERS * self.freehit[w]
                 for w in self.gameweeks
             ),
             name='def_limit_fh',
         )
         self.model.add_constraints(
             (
-                so.expr_sum(self.team_fh[p, w] * self.data.loc[p, 'MD'] for p in self.players) == 5 * self.freehit[w]
+                so.expr_sum(self.team_fh[p, w] * self.data.loc[p, 'MD'] for p in self.players)
+                == MAX_NUMBER_MIDFIELDERS * self.freehit[w]
                 for w in self.gameweeks
             ),
             name='mid_limit_fh',
         )
         self.model.add_constraints(
             (
-                so.expr_sum(self.team_fh[p, w] * self.data.loc[p, 'FW'] for p in self.players) == 3 * self.freehit[w]
+                so.expr_sum(self.team_fh[p, w] * self.data.loc[p, 'FW'] for p in self.players)
+                == MAX_NUMBER_FORWARDS * self.freehit[w]
                 for w in self.gameweeks
             ),
             name='for_limit_fh',
@@ -975,28 +995,29 @@ class Team_Optimization:
         )
         self.model.add_constraints(
             (
-                so.expr_sum(self.starter[p, w] * self.data.loc[p, 'GK'] for p in self.players) == 1 + self.bboost[w]
+                so.expr_sum(self.starter[p, w] * self.data.loc[p, 'GK'] for p in self.players)
+                == MIN_FORMATION['GK'] + self.bboost[w]
                 for w in self.gameweeks
             ),
             name='gk_min',
         )
         self.model.add_constraints(
             (
-                so.expr_sum(self.starter[p, w] * self.data.loc[p, 'DF'] for p in self.players) >= 3
+                so.expr_sum(self.starter[p, w] * self.data.loc[p, 'DF'] for p in self.players) >= MIN_FORMATION['DF']
                 for w in self.gameweeks
             ),
             name='def_min',
         )
         self.model.add_constraints(
             (
-                so.expr_sum(self.starter[p, w] * self.data.loc[p, 'MD'] for p in self.players) >= 2
+                so.expr_sum(self.starter[p, w] * self.data.loc[p, 'MD'] for p in self.players) >= MIN_FORMATION['MD']
                 for w in self.gameweeks
             ),
             name='mid_min',
         )
         self.model.add_constraints(
             (
-                so.expr_sum(self.starter[p, w] * self.data.loc[p, 'FW'] for p in self.players) >= 1
+                so.expr_sum(self.starter[p, w] * self.data.loc[p, 'FW'] for p in self.players) >= MIN_FORMATION['FW']
                 for w in self.gameweeks
             ),
             name='for_min',
@@ -1100,10 +1121,12 @@ class Team_Optimization:
 
         # Budget
         sold_amount = {
-            w: so.expr_sum(self.sell[p, w] * self.data.loc[p, 'selling_price'] for p in self.players) for w in self.gameweeks
+            w: so.expr_sum(self.sell[p, w] * self.data.loc[p, 'selling_price'] for p in self.players)
+            for w in self.gameweeks
         }
         bought_amount = {
-            w: so.expr_sum(self.buy[p, w] * self.data.loc[p, 'purchase_price'] for p in self.players) for w in self.gameweeks
+            w: so.expr_sum(self.buy[p, w] * self.data.loc[p, 'purchase_price'] for p in self.players)
+            for w in self.gameweeks
         }
         # The cost of the squad must exceed the budget
         self.model.add_constraints(
@@ -1158,7 +1181,9 @@ class Team_Optimization:
         )
 
         goalkeeper_cost = {
-            w: so.expr_sum(self.team[p, w] * self.data.loc[p, 'purchase_price'] * self.data.loc[p, 'GK'] for p in self.players)
+            w: so.expr_sum(
+                self.team[p, w] * self.data.loc[p, 'purchase_price'] * self.data.loc[p, 'GK'] for p in self.players
+            )
             for w in self.gameweeks
         }
         self.model.add_constraints(
@@ -1166,7 +1191,9 @@ class Team_Optimization:
         )
 
         goalkeeper_cost_fh = {
-            w: so.expr_sum(self.team_fh[p, w] * self.data.loc[p, 'purchase_price'] * self.data.loc[p, 'GK'] for p in self.players)
+            w: so.expr_sum(
+                self.team_fh[p, w] * self.data.loc[p, 'purchase_price'] * self.data.loc[p, 'GK'] for p in self.players
+            )
             for w in self.gameweeks
         }
         self.model.add_constraints(
@@ -1200,46 +1227,37 @@ class Team_Optimization:
             name='max_ft',
         )
 
-    def advanced_wildcard(
-        self,
-        freehit_gw=-1,
-        bboost_gw=-1,
-        threexc_gw=-1,
-        objective_type='decay',
-        decay_gameweek=[0.9, 0.8, 0.7],
-        vicecap_decay=0.1,
-        decay_bench=[0.1, 0.1, 0.1, 0.1],
-        ft_val=0,
-        itb_val=0,
-        hit_val=6,
-        goalkeeper_max_budget=100,
-        def_stack_limit=3,
-    ):
-        """Build wildcard model for iteratively long horizon
+    def advanced_wildcard(self, params: dict) -> tuple:  # noqa: C901, PLR0912, PLR0915
+        freehit_gw = params.get('freehit_gw', -1)
+        bboost_gw = params.get('bboost_gw', -1)
+        threexc_gw = params.get('threexc_gw', -1)
+        objective_type = params.get('objective_type', 'decay')
+        decay_gameweek = params.get('decay_gameweek', [0.9, 0.8, 0.7])
+        vicecap_decay = params.get('vicecap_decay', 0.1)
+        decay_bench = params.get('decay_bench', [0.1, 0.1, 0.1, 0.1])
+        ft_val = params.get('ft_val', 0)
+        itb_val = params.get('itb_val', 0)
+        hit_val = params.get('hit_val', 6)
+        goalkeeper_max_budget = params.get('goalkeeper_max_budget', 100)
+        def_stack_limit = params.get('def_stack_limit', 3)
 
-        Args:
-            freehit_gw (int): Gw to use chip in
-            bboost_gw (int): Gw to use chip in
-            threexc_gw (int): Gw to use chip in
-            objective_type (str): Decay to apply higher importance to early GW
-                and Linear to apply uniform weights
-            decay_gameweek (float): Weight decay per gameweek
-            vicecap_decay (float): Weight applied to points scored by vice
-            decay_bench (list): Weight applied to points scored by bench.
-            ft_val (int): Value of rolling a transfer.
-            itb_val (int): Value of having money in the bank.
-            hit_val (int): Penalty of taking a hit.
-            goalkeeper_max_budget (int): Maximum amount to use on goalkeepers.
-            def_stack_limit (int): Maximum number of defender&goalkeeper from the same team.
-        """
-        assert freehit_gw < self.horizon, 'Select a GW within the horizon.'
-        assert bboost_gw < self.horizon, 'Select a GW within the horizon.'
-        assert threexc_gw < self.horizon, 'Select a GW within the horizon.'
+        gw_out_of_horizon_msg = 'Select a GW within the horizon.'
+        if freehit_gw >= self.horizon:
+            raise ValueError(gw_out_of_horizon_msg)
+        if bboost_gw >= self.horizon:
+            raise ValueError(gw_out_of_horizon_msg)
+        if threexc_gw >= self.horizon:
+            raise ValueError(gw_out_of_horizon_msg)
 
-        assert not (self.freehit_used and freehit_gw >= 0), 'Freehit chip was already used.'
-        assert not (self.bboost_used and bboost_gw >= 0), 'Bench boost chip was already used.'
-        assert not (self.threexc_used and threexc_gw >= 0), 'Tripple captain chip was already used.'
-        assert not self.wildcard_used, 'Wildcard chip was already used.'
+        freehit_used_msg = 'Freehit chip was already used.'
+        if self.freehit_used and freehit_gw >= 0:
+            raise ValueError(freehit_used_msg)
+        bboost_used_msg = 'Bench boost chip was already used.'
+        if self.bboost_used and bboost_gw >= 0:
+            raise ValueError(bboost_used_msg)
+        threexc_used_msg = 'Tripple captain chip was already used.'
+        if self.threexc_used and threexc_gw >= 0:
+            raise ValueError(threexc_used_msg)
 
         # Longterm Model
         model_name = 'longterm'
@@ -1325,17 +1343,17 @@ class Team_Optimization:
         # Chips
         # The chips must not be used more than once
         self.model.add_constraint(
-            so.expr_sum(self.triple[p, w] for p in self.players for w in self.gameweeks) <= --(not self.threexc_used),
+            so.expr_sum(self.triple[p, w] for p in self.players for w in self.gameweeks) <= int(not self.threexc_used),
             name='tc_once',
         )
         self.model.add_constraint(
-            so.expr_sum(self.bboost[w] for w in self.gameweeks) <= --(not self.bboost_used), name='bb_once'
+            so.expr_sum(self.bboost[w] for w in self.gameweeks) <= int(not self.bboost_used), name='bb_once'
         )
         self.model.add_constraint(
-            so.expr_sum(self.freehit[w] for w in self.gameweeks) <= --(not self.freehit_used), name='fh_once'
+            so.expr_sum(self.freehit[w] for w in self.gameweeks) <= int(not self.freehit_used), name='fh_once'
         )
         self.model.add_constraint(
-            so.expr_sum(self.wildcard[w] for w in self.gameweeks) <= --(not self.wildcard_used), name='wc_once'
+            so.expr_sum(self.wildcard[w] for w in self.gameweeks) <= int(not self.wildcard_used), name='wc_once'
         )
 
         # The chips must not be used on the same GW
@@ -1378,26 +1396,39 @@ class Team_Optimization:
         # The number of players must fit the requirements
         # 2 Gk, 5 Def, 5 Mid, 3 For
         self.model.add_constraints(
-            (so.expr_sum(self.team[p, w] * self.data.loc[p, 'GK'] for p in self.players) == 2 for w in self.gameweeks),
+            (
+                so.expr_sum(self.team[p, w] * self.data.loc[p, 'GK'] for p in self.players) == MAX_NUMBER_GOALKEEPERS
+                for w in self.gameweeks
+            ),
             name='gk_limit',
         )
         self.model.add_constraints(
-            (so.expr_sum(self.team[p, w] * self.data.loc[p, 'DF'] for p in self.players) == 5 for w in self.gameweeks),
+            (
+                so.expr_sum(self.team[p, w] * self.data.loc[p, 'DF'] for p in self.players) == MAX_NUMBER_DEFENDERS
+                for w in self.gameweeks
+            ),
             name='def_limit',
         )
         self.model.add_constraints(
-            (so.expr_sum(self.team[p, w] * self.data.loc[p, 'MD'] for p in self.players) == 5 for w in self.gameweeks),
+            (
+                so.expr_sum(self.team[p, w] * self.data.loc[p, 'MD'] for p in self.players) == MAX_NUMBER_MIDFIELDERS
+                for w in self.gameweeks
+            ),
             name='mid_limit',
         )
         self.model.add_constraints(
-            (so.expr_sum(self.team[p, w] * self.data.loc[p, 'FW'] for p in self.players) == 3 for w in self.gameweeks),
+            (
+                so.expr_sum(self.team[p, w] * self.data.loc[p, 'FW'] for p in self.players) == MAX_NUMBER_FORWARDS
+                for w in self.gameweeks
+            ),
             name='for_limit',
         )
 
         # The number of players from a team must exceed three
         self.model.add_constraints(
             (
-                so.expr_sum(self.team[p, w] * self.data.loc[p, team_name] for p in self.players) <= 3
+                so.expr_sum(self.team[p, w] * self.data.loc[p, team_name] for p in self.players)
+                <= MAX_NUMBER_PLAYERS_PER_TEAM
                 for team_name in self.team_names
                 for w in self.gameweeks
             ),
@@ -1408,28 +1439,32 @@ class Team_Optimization:
         # 2 Gk, 5 Def, 5 Mid, 3 For
         self.model.add_constraints(
             (
-                so.expr_sum(self.team_fh[p, w] * self.data.loc[p, 'GK'] for p in self.players) == 2 * self.freehit[w]
+                so.expr_sum(self.team_fh[p, w] * self.data.loc[p, 'GK'] for p in self.players)
+                == MAX_NUMBER_GOALKEEPERS * self.freehit[w]
                 for w in self.gameweeks
             ),
             name='gk_limit_fh',
         )
         self.model.add_constraints(
             (
-                so.expr_sum(self.team_fh[p, w] * self.data.loc[p, 'DF'] for p in self.players) == 5 * self.freehit[w]
+                so.expr_sum(self.team_fh[p, w] * self.data.loc[p, 'DF'] for p in self.players)
+                == MAX_NUMBER_DEFENDERS * self.freehit[w]
                 for w in self.gameweeks
             ),
             name='def_limit_fh',
         )
         self.model.add_constraints(
             (
-                so.expr_sum(self.team_fh[p, w] * self.data.loc[p, 'MD'] for p in self.players) == 5 * self.freehit[w]
+                so.expr_sum(self.team_fh[p, w] * self.data.loc[p, 'MD'] for p in self.players)
+                == MAX_NUMBER_MIDFIELDERS * self.freehit[w]
                 for w in self.gameweeks
             ),
             name='mid_limit_fh',
         )
         self.model.add_constraints(
             (
-                so.expr_sum(self.team_fh[p, w] * self.data.loc[p, 'FW'] for p in self.players) == 3 * self.freehit[w]
+                so.expr_sum(self.team_fh[p, w] * self.data.loc[p, 'FW'] for p in self.players)
+                == MAX_NUMBER_FORWARDS * self.freehit[w]
                 for w in self.gameweeks
             ),
             name='for_limit_fh',
@@ -1462,14 +1497,14 @@ class Team_Optimization:
         )
         self.model.add_constraints(
             (
-                so.expr_sum(self.starter[p, w] * self.data.loc[p, 'DF'] for p in self.players) >= 3
+                so.expr_sum(self.starter[p, w] * self.data.loc[p, 'DF'] for p in self.players) >= MIN_FORMATION['DF']
                 for w in self.gameweeks
             ),
             name='def_min',
         )
         self.model.add_constraints(
             (
-                so.expr_sum(self.starter[p, w] * self.data.loc[p, 'MD'] for p in self.players) >= 2
+                so.expr_sum(self.starter[p, w] * self.data.loc[p, 'MD'] for p in self.players) >= MIN_FORMATION['MD']
                 for w in self.gameweeks
             ),
             name='mid_min',
@@ -1580,10 +1615,12 @@ class Team_Optimization:
 
         # Budget
         sold_amount = {
-            w: so.expr_sum(self.sell[p, w] * self.data.loc[p, 'selling_price'] for p in self.players) for w in self.gameweeks
+            w: so.expr_sum(self.sell[p, w] * self.data.loc[p, 'selling_price'] for p in self.players)
+            for w in self.gameweeks
         }
         bought_amount = {
-            w: so.expr_sum(self.buy[p, w] * self.data.loc[p, 'purchase_price'] for p in self.players) for w in self.gameweeks
+            w: so.expr_sum(self.buy[p, w] * self.data.loc[p, 'purchase_price'] for p in self.players)
+            for w in self.gameweeks
         }
         # The cost of the squad must exceed the budget
         self.model.add_constraints(
@@ -1638,7 +1675,9 @@ class Team_Optimization:
         )
 
         goalkeeper_cost = {
-            w: so.expr_sum(self.team[p, w] * self.data.loc[p, 'purchase_price'] * self.data.loc[p, 'GK'] for p in self.players)
+            w: so.expr_sum(
+                self.team[p, w] * self.data.loc[p, 'purchase_price'] * self.data.loc[p, 'GK'] for p in self.players
+            )
             for w in self.gameweeks
         }
         self.model.add_constraints(
@@ -1646,7 +1685,9 @@ class Team_Optimization:
         )
 
         goalkeeper_cost_fh = {
-            w: so.expr_sum(self.team_fh[p, w] * self.data.loc[p, 'purchase_price'] * self.data.loc[p, 'GK'] for p in self.players)
+            w: so.expr_sum(
+                self.team_fh[p, w] * self.data.loc[p, 'purchase_price'] * self.data.loc[p, 'GK'] for p in self.players
+            )
             for w in self.gameweeks
         }
         self.model.add_constraints(
@@ -1684,21 +1725,21 @@ class Team_Optimization:
         # NOTE: This messes up Rolling transfer logic but it matters not
         # Since we're not using FTV in objective function.
         self.model.add_constraints(
-            (so.expr_sum(self.buy[p, w] for p in self.players) == 0 for w in self.gameweeks[1:]), name=f'no_transfer'
+            (so.expr_sum(self.buy[p, w] for p in self.players) == 0 for w in self.gameweeks[1:]), name='no_transfer'
         )
 
         # Solve
         self.model.export_mps(filename=f'tmp/{model_name}.mps')
         command = f'cbc tmp/{model_name}.mps solve solu ' + f'tmp/{model_name}_solution.txt'
 
-        process = Popen(command, shell=True, stdout=DEVNULL)
+        process = Popen(command, shell=True, stdout=DEVNULL)  # noqa: S602
         process.wait()
 
         # Reset variables for next passes
         for v in self.model.get_variables():
             v.set_value(0)
 
-        with open(f'tmp/{model_name}_solution.txt', 'r') as f:
+        with Path(f'tmp/{model_name}_solution.txt').open('r') as f:
             for line in f:
                 if 'objective value' in line:
                     continue
@@ -1821,25 +1862,27 @@ class Team_Optimization:
         # Initial conditions: set team and FT depending on the team
         self.model.add_constraints((self.team[p, self.start - 1] == 1 for p in self.initial_team), name='initial_team')
         self.model.add_constraint(self.in_the_bank[self.start - 1] == self.bank, name='initial_itb')
+        number_players_for_longterm = 10
         self.model.add_constraint(
-            (so.expr_sum(self.team[p, self.start] for p in wc_team) >= 10), name='initial_wc_team'
+            (so.expr_sum(self.team[p, self.start] for p in wc_team) >= number_players_for_longterm),
+            name='initial_wc_team',
         )
 
         # Constraints
         # Chips
         # The chips must not be used more than once
         self.model.add_constraint(
-            so.expr_sum(self.triple[p, w] for p in self.players for w in self.gameweeks) <= --(not self.threexc_used),
+            so.expr_sum(self.triple[p, w] for p in self.players for w in self.gameweeks) <= int(not self.threexc_used),
             name='tc_once',
         )
         self.model.add_constraint(
-            so.expr_sum(self.bboost[w] for w in self.gameweeks) <= --(not self.bboost_used), name='bb_once'
+            so.expr_sum(self.bboost[w] for w in self.gameweeks) <= int(not self.bboost_used), name='bb_once'
         )
         self.model.add_constraint(
-            so.expr_sum(self.freehit[w] for w in self.gameweeks) <= --(not self.freehit_used), name='fh_once'
+            so.expr_sum(self.freehit[w] for w in self.gameweeks) <= int(not self.freehit_used), name='fh_once'
         )
         self.model.add_constraint(
-            so.expr_sum(self.wildcard[w] for w in self.gameweeks) <= --(not self.wildcard_used), name='wc_once'
+            so.expr_sum(self.wildcard[w] for w in self.gameweeks) <= int(not self.wildcard_used), name='wc_once'
         )
 
         # The chips must not be used on the same GW
@@ -1881,26 +1924,39 @@ class Team_Optimization:
         # The number of players must fit the requirements
         # 2 Gk, 5 Def, 5 Mid, 3 For
         self.model.add_constraints(
-            (so.expr_sum(self.team[p, w] * self.data.loc[p, 'GK'] for p in self.players) == 2 for w in self.gameweeks),
+            (
+                so.expr_sum(self.team[p, w] * self.data.loc[p, 'GK'] for p in self.players) == MAX_NUMBER_GOALKEEPERS
+                for w in self.gameweeks
+            ),
             name='gk_limit',
         )
         self.model.add_constraints(
-            (so.expr_sum(self.team[p, w] * self.data.loc[p, 'DF'] for p in self.players) == 5 for w in self.gameweeks),
+            (
+                so.expr_sum(self.team[p, w] * self.data.loc[p, 'DF'] for p in self.players) == MAX_NUMBER_DEFENDERS
+                for w in self.gameweeks
+            ),
             name='def_limit',
         )
         self.model.add_constraints(
-            (so.expr_sum(self.team[p, w] * self.data.loc[p, 'MD'] for p in self.players) == 5 for w in self.gameweeks),
+            (
+                so.expr_sum(self.team[p, w] * self.data.loc[p, 'MD'] for p in self.players) == MAX_NUMBER_MIDFIELDERS
+                for w in self.gameweeks
+            ),
             name='mid_limit',
         )
         self.model.add_constraints(
-            (so.expr_sum(self.team[p, w] * self.data.loc[p, 'FW'] for p in self.players) == 3 for w in self.gameweeks),
+            (
+                so.expr_sum(self.team[p, w] * self.data.loc[p, 'FW'] for p in self.players) == MAX_NUMBER_FORWARDS
+                for w in self.gameweeks
+            ),
             name='for_limit',
         )
 
         # The number of players from a team must exceed three
         self.model.add_constraints(
             (
-                so.expr_sum(self.team[p, w] * self.data.loc[p, team_name] for p in self.players) <= 3
+                so.expr_sum(self.team[p, w] * self.data.loc[p, team_name] for p in self.players)
+                <= MAX_NUMBER_PLAYERS_PER_TEAM
                 for team_name in self.team_names
                 for w in self.gameweeks
             ),
@@ -1911,28 +1967,32 @@ class Team_Optimization:
         # 2 Gk, 5 Def, 5 Mid, 3 For
         self.model.add_constraints(
             (
-                so.expr_sum(self.team_fh[p, w] * self.data.loc[p, 'GK'] for p in self.players) == 2 * self.freehit[w]
+                so.expr_sum(self.team_fh[p, w] * self.data.loc[p, 'GK'] for p in self.players)
+                == MAX_NUMBER_GOALKEEPERS * self.freehit[w]
                 for w in self.gameweeks
             ),
             name='gk_limit_fh',
         )
         self.model.add_constraints(
             (
-                so.expr_sum(self.team_fh[p, w] * self.data.loc[p, 'DF'] for p in self.players) == 5 * self.freehit[w]
+                so.expr_sum(self.team_fh[p, w] * self.data.loc[p, 'DF'] for p in self.players)
+                == MAX_NUMBER_DEFENDERS * self.freehit[w]
                 for w in self.gameweeks
             ),
             name='def_limit_fh',
         )
         self.model.add_constraints(
             (
-                so.expr_sum(self.team_fh[p, w] * self.data.loc[p, 'MD'] for p in self.players) == 5 * self.freehit[w]
+                so.expr_sum(self.team_fh[p, w] * self.data.loc[p, 'MD'] for p in self.players)
+                == MAX_NUMBER_MIDFIELDERS * self.freehit[w]
                 for w in self.gameweeks
             ),
             name='mid_limit_fh',
         )
         self.model.add_constraints(
             (
-                so.expr_sum(self.team_fh[p, w] * self.data.loc[p, 'FW'] for p in self.players) == 3 * self.freehit[w]
+                so.expr_sum(self.team_fh[p, w] * self.data.loc[p, 'FW'] for p in self.players)
+                == MAX_NUMBER_FORWARDS * self.freehit[w]
                 for w in self.gameweeks
             ),
             name='for_limit_fh',
@@ -1958,28 +2018,29 @@ class Team_Optimization:
         )
         self.model.add_constraints(
             (
-                so.expr_sum(self.starter[p, w] * self.data.loc[p, 'GK'] for p in self.players) == 1 + self.bboost[w]
+                so.expr_sum(self.starter[p, w] * self.data.loc[p, 'GK'] for p in self.players)
+                == MIN_FORMATION['GK'] + self.bboost[w]
                 for w in self.gameweeks
             ),
             name='gk_min',
         )
         self.model.add_constraints(
             (
-                so.expr_sum(self.starter[p, w] * self.data.loc[p, 'DF'] for p in self.players) >= 3
+                so.expr_sum(self.starter[p, w] * self.data.loc[p, 'DF'] for p in self.players) >= MIN_FORMATION['DF']
                 for w in self.gameweeks
             ),
             name='def_min',
         )
         self.model.add_constraints(
             (
-                so.expr_sum(self.starter[p, w] * self.data.loc[p, 'MD'] for p in self.players) >= 2
+                so.expr_sum(self.starter[p, w] * self.data.loc[p, 'MD'] for p in self.players) >= MIN_FORMATION['MD']
                 for w in self.gameweeks
             ),
             name='mid_min',
         )
         self.model.add_constraints(
             (
-                so.expr_sum(self.starter[p, w] * self.data.loc[p, 'FW'] for p in self.players) >= 1
+                so.expr_sum(self.starter[p, w] * self.data.loc[p, 'FW'] for p in self.players) >= MIN_FORMATION['FW']
                 for w in self.gameweeks
             ),
             name='for_min',
@@ -2083,10 +2144,12 @@ class Team_Optimization:
 
         # Budget
         sold_amount = {
-            w: so.expr_sum(self.sell[p, w] * self.data.loc[p, 'selling_price'] for p in self.players) for w in self.gameweeks
+            w: so.expr_sum(self.sell[p, w] * self.data.loc[p, 'selling_price'] for p in self.players)
+            for w in self.gameweeks
         }
         bought_amount = {
-            w: so.expr_sum(self.buy[p, w] * self.data.loc[p, 'purchase_price'] for p in self.players) for w in self.gameweeks
+            w: so.expr_sum(self.buy[p, w] * self.data.loc[p, 'purchase_price'] for p in self.players)
+            for w in self.gameweeks
         }
         # The cost of the squad must exceed the budget
         self.model.add_constraints(
@@ -2141,7 +2204,9 @@ class Team_Optimization:
         )
 
         goalkeeper_cost = {
-            w: so.expr_sum(self.team[p, w] * self.data.loc[p, 'purchase_price'] * self.data.loc[p, 'GK'] for p in self.players)
+            w: so.expr_sum(
+                self.team[p, w] * self.data.loc[p, 'purchase_price'] * self.data.loc[p, 'GK'] for p in self.players
+            )
             for w in self.gameweeks
         }
         self.model.add_constraints(
@@ -2149,7 +2214,9 @@ class Team_Optimization:
         )
 
         goalkeeper_cost_fh = {
-            w: so.expr_sum(self.team_fh[p, w] * self.data.loc[p, 'purchase_price'] * self.data.loc[p, 'GK'] for p in self.players)
+            w: so.expr_sum(
+                self.team_fh[p, w] * self.data.loc[p, 'purchase_price'] * self.data.loc[p, 'GK'] for p in self.players
+            )
             for w in self.gameweeks
         }
         self.model.add_constraints(
@@ -2190,14 +2257,14 @@ class Team_Optimization:
         self.model.export_mps(filename=f'tmp/{model_name}.mps')
         command = f'cbc tmp/{model_name}.mps solve solu ' + f'tmp/{model_name}_solution.txt'
 
-        process = Popen(command, shell=True, stdout=DEVNULL)
+        process = Popen(command, shell=True, stdout=DEVNULL)  # noqa: S602
         process.wait()
 
         # Reset variables for next passes
         for v in self.model.get_variables():
             v.set_value(0)
 
-        with open(f'tmp/{model_name}_solution.txt', 'r') as f:
+        with Path(f'tmp/{model_name}_solution.txt').open('r') as f:
             for line in f:
                 if 'objective value' in line:
                     continue
@@ -2320,25 +2387,27 @@ class Team_Optimization:
         # Initial conditions: set team and FT depending on the team
         self.model.add_constraints((self.team[p, self.start - 1] == 1 for p in self.initial_team), name='initial_team')
         self.model.add_constraint(self.in_the_bank[self.start - 1] == self.bank, name='initial_itb')
+        number_players_for_midterm = 13
         self.model.add_constraint(
-            (so.expr_sum(self.team[p, self.start] for p in wc_team) >= 13), name='initial_wc_team'
+            (so.expr_sum(self.team[p, self.start] for p in wc_team) >= number_players_for_midterm),
+            name='initial_wc_team',
         )
 
         # Constraints
         # Chips
         # The chips must not be used more than once
         self.model.add_constraint(
-            so.expr_sum(self.triple[p, w] for p in self.players for w in self.gameweeks) <= --(not self.threexc_used),
+            so.expr_sum(self.triple[p, w] for p in self.players for w in self.gameweeks) <= int(not self.threexc_used),
             name='tc_once',
         )
         self.model.add_constraint(
-            so.expr_sum(self.bboost[w] for w in self.gameweeks) <= --(not self.bboost_used), name='bb_once'
+            so.expr_sum(self.bboost[w] for w in self.gameweeks) <= int(not self.bboost_used), name='bb_once'
         )
         self.model.add_constraint(
-            so.expr_sum(self.freehit[w] for w in self.gameweeks) <= --(not self.freehit_used), name='fh_once'
+            so.expr_sum(self.freehit[w] for w in self.gameweeks) <= int(not self.freehit_used), name='fh_once'
         )
         self.model.add_constraint(
-            so.expr_sum(self.wildcard[w] for w in self.gameweeks) <= --(not self.wildcard_used), name='wc_once'
+            so.expr_sum(self.wildcard[w] for w in self.gameweeks) <= int(not self.wildcard_used), name='wc_once'
         )
 
         # The chips must not be used on the same GW
@@ -2380,26 +2449,39 @@ class Team_Optimization:
         # The number of players must fit the requirements
         # 2 Gk, 5 Def, 5 Mid, 3 For
         self.model.add_constraints(
-            (so.expr_sum(self.team[p, w] * self.data.loc[p, 'GK'] for p in self.players) == 2 for w in self.gameweeks),
+            (
+                so.expr_sum(self.team[p, w] * self.data.loc[p, 'GK'] for p in self.players) == MAX_NUMBER_GOALKEEPERS
+                for w in self.gameweeks
+            ),
             name='gk_limit',
         )
         self.model.add_constraints(
-            (so.expr_sum(self.team[p, w] * self.data.loc[p, 'DF'] for p in self.players) == 5 for w in self.gameweeks),
+            (
+                so.expr_sum(self.team[p, w] * self.data.loc[p, 'DF'] for p in self.players) == MAX_NUMBER_DEFENDERS
+                for w in self.gameweeks
+            ),
             name='def_limit',
         )
         self.model.add_constraints(
-            (so.expr_sum(self.team[p, w] * self.data.loc[p, 'MD'] for p in self.players) == 5 for w in self.gameweeks),
+            (
+                so.expr_sum(self.team[p, w] * self.data.loc[p, 'MD'] for p in self.players) == MAX_NUMBER_MIDFIELDERS
+                for w in self.gameweeks
+            ),
             name='mid_limit',
         )
         self.model.add_constraints(
-            (so.expr_sum(self.team[p, w] * self.data.loc[p, 'FW'] for p in self.players) == 3 for w in self.gameweeks),
+            (
+                so.expr_sum(self.team[p, w] * self.data.loc[p, 'FW'] for p in self.players) == MAX_NUMBER_FORWARDS
+                for w in self.gameweeks
+            ),
             name='for_limit',
         )
 
         # The number of players from a team must exceed three
         self.model.add_constraints(
             (
-                so.expr_sum(self.team[p, w] * self.data.loc[p, team_name] for p in self.players) <= 3
+                so.expr_sum(self.team[p, w] * self.data.loc[p, team_name] for p in self.players)
+                <= MAX_NUMBER_PLAYERS_PER_TEAM
                 for team_name in self.team_names
                 for w in self.gameweeks
             ),
@@ -2410,28 +2492,32 @@ class Team_Optimization:
         # 2 Gk, 5 Def, 5 Mid, 3 For
         self.model.add_constraints(
             (
-                so.expr_sum(self.team_fh[p, w] * self.data.loc[p, 'GK'] for p in self.players) == 2 * self.freehit[w]
+                so.expr_sum(self.team_fh[p, w] * self.data.loc[p, 'GK'] for p in self.players)
+                == MAX_NUMBER_GOALKEEPERS * self.freehit[w]
                 for w in self.gameweeks
             ),
             name='gk_limit_fh',
         )
         self.model.add_constraints(
             (
-                so.expr_sum(self.team_fh[p, w] * self.data.loc[p, 'DF'] for p in self.players) == 5 * self.freehit[w]
+                so.expr_sum(self.team_fh[p, w] * self.data.loc[p, 'DF'] for p in self.players)
+                == MAX_NUMBER_DEFENDERS * self.freehit[w]
                 for w in self.gameweeks
             ),
             name='def_limit_fh',
         )
         self.model.add_constraints(
             (
-                so.expr_sum(self.team_fh[p, w] * self.data.loc[p, 'MD'] for p in self.players) == 5 * self.freehit[w]
+                so.expr_sum(self.team_fh[p, w] * self.data.loc[p, 'MD'] for p in self.players)
+                == MAX_NUMBER_MIDFIELDERS * self.freehit[w]
                 for w in self.gameweeks
             ),
             name='mid_limit_fh',
         )
         self.model.add_constraints(
             (
-                so.expr_sum(self.team_fh[p, w] * self.data.loc[p, 'FW'] for p in self.players) == 3 * self.freehit[w]
+                so.expr_sum(self.team_fh[p, w] * self.data.loc[p, 'FW'] for p in self.players)
+                == MAX_NUMBER_FORWARDS * self.freehit[w]
                 for w in self.gameweeks
             ),
             name='for_limit_fh',
@@ -2457,28 +2543,29 @@ class Team_Optimization:
         )
         self.model.add_constraints(
             (
-                so.expr_sum(self.starter[p, w] * self.data.loc[p, 'GK'] for p in self.players) == 1 + self.bboost[w]
+                so.expr_sum(self.starter[p, w] * self.data.loc[p, 'GK'] for p in self.players)
+                == MIN_FORMATION['GK'] + self.bboost[w]
                 for w in self.gameweeks
             ),
             name='gk_min',
         )
         self.model.add_constraints(
             (
-                so.expr_sum(self.starter[p, w] * self.data.loc[p, 'DF'] for p in self.players) >= 3
+                so.expr_sum(self.starter[p, w] * self.data.loc[p, 'DF'] for p in self.players) >= MIN_FORMATION['DF']
                 for w in self.gameweeks
             ),
             name='def_min',
         )
         self.model.add_constraints(
             (
-                so.expr_sum(self.starter[p, w] * self.data.loc[p, 'MD'] for p in self.players) >= 2
+                so.expr_sum(self.starter[p, w] * self.data.loc[p, 'MD'] for p in self.players) >= MIN_FORMATION['MD']
                 for w in self.gameweeks
             ),
             name='mid_min',
         )
         self.model.add_constraints(
             (
-                so.expr_sum(self.starter[p, w] * self.data.loc[p, 'FW'] for p in self.players) >= 1
+                so.expr_sum(self.starter[p, w] * self.data.loc[p, 'FW'] for p in self.players) >= MIN_FORMATION['FW']
                 for w in self.gameweeks
             ),
             name='for_min',
@@ -2582,10 +2669,12 @@ class Team_Optimization:
 
         # Budget
         sold_amount = {
-            w: so.expr_sum(self.sell[p, w] * self.data.loc[p, 'selling_price'] for p in self.players) for w in self.gameweeks
+            w: so.expr_sum(self.sell[p, w] * self.data.loc[p, 'selling_price'] for p in self.players)
+            for w in self.gameweeks
         }
         bought_amount = {
-            w: so.expr_sum(self.buy[p, w] * self.data.loc[p, 'purchase_price'] for p in self.players) for w in self.gameweeks
+            w: so.expr_sum(self.buy[p, w] * self.data.loc[p, 'purchase_price'] for p in self.players)
+            for w in self.gameweeks
         }
         # The cost of the squad must exceed the budget
         self.model.add_constraints(
@@ -2640,7 +2729,9 @@ class Team_Optimization:
         )
 
         goalkeeper_cost = {
-            w: so.expr_sum(self.team[p, w] * self.data.loc[p, 'purchase_price'] * self.data.loc[p, 'GK'] for p in self.players)
+            w: so.expr_sum(
+                self.team[p, w] * self.data.loc[p, 'purchase_price'] * self.data.loc[p, 'GK'] for p in self.players
+            )
             for w in self.gameweeks
         }
         self.model.add_constraints(
@@ -2648,7 +2739,9 @@ class Team_Optimization:
         )
 
         goalkeeper_cost_fh = {
-            w: so.expr_sum(self.team_fh[p, w] * self.data.loc[p, 'purchase_price'] * self.data.loc[p, 'GK'] for p in self.players)
+            w: so.expr_sum(
+                self.team_fh[p, w] * self.data.loc[p, 'purchase_price'] * self.data.loc[p, 'GK'] for p in self.players
+            )
             for w in self.gameweeks
         }
         self.model.add_constraints(
@@ -2686,14 +2779,14 @@ class Team_Optimization:
         self.model.export_mps(filename=f'tmp/{model_name}.mps')
         command = f'cbc tmp/{model_name}.mps solve solu ' + f'tmp/{model_name}_solution.txt'
 
-        process = Popen(command, shell=True, stdout=DEVNULL)
+        process = Popen(command, shell=True, stdout=DEVNULL)  # noqa: S602
         process.wait()
 
         # Reset variables for next passes
         for v in self.model.get_variables():
             v.set_value(0)
 
-        with open(f'tmp/{model_name}_solution.txt', 'r') as f:
+        with Path(f'tmp/{model_name}_solution.txt').open('r') as f:
             for line in f:
                 if 'objective value' in line:
                     continue
@@ -2724,23 +2817,14 @@ class Team_Optimization:
             nb_suboptimal=model_name,
         )
 
-    def solve(self, model_name, log=False, i=0, time_lim=0):
-        """Solves the model
-
-        Args:
-            model_name (string): Model name
-            log (bool): Sasoptpy logging progress
-            i (int): Iteration (as part of suboptimals)
-            time_lim (int): Time upper bound for the duration
-                of optimization past the initial feasible solution
-        """
+    def solve(self, model_name: str, log: bool = False, i: int = 0, time_lim: int = 0) -> dict:  # noqa: FBT001, FBT002
         self.model.export_mps(filename=f'tmp/{model_name}.mps')
         if time_lim == 0:
             command = f'cbc tmp/{model_name}.mps cost column solve solu ' + f'tmp/{model_name}_solution.txt'
             if log:
-                os.system(command)
+                os.system(command)  # noqa: S605
             else:
-                process = Popen(command, shell=True, stdout=DEVNULL)
+                process = Popen(command, shell=True, stdout=DEVNULL)  # noqa: S602
                 process.wait()
 
         else:
@@ -2748,26 +2832,26 @@ class Team_Optimization:
                 f'cbc tmp/{model_name}.mps cost column ratio 1 solve solu ' + f'tmp/{model_name}_solution_feasible.txt'
             )
             if log:
-                os.system(command)
+                os.system(command)  # noqa: S605
             else:
-                process = Popen(command, shell=True, stdout=DEVNULL)
+                process = Popen(command, shell=True, stdout=DEVNULL)  # noqa: S602
                 process.wait()
 
             command = (
                 f'cbc tmp/{model_name}.mps mips tmp/{model_name}_solution_feasible.txt '
-                + f'cost column sec {time_lim} solve solu tmp/{model_name}_solution.txt'
+                f'cost column sec {time_lim} solve solu tmp/{model_name}_solution.txt'
             )
             if log:
-                os.system(command)
+                os.system(command)  # noqa: S605
             else:
-                process = Popen(command, shell=True, stdout=DEVNULL)
+                process = Popen(command, shell=True, stdout=DEVNULL)  # noqa: S602
                 process.wait()
 
         # Reset variables for next passes
         for v in self.model.get_variables():
             v.set_value(0)
 
-        with open(f'tmp/{model_name}_solution.txt', 'r') as f:
+        with Path(f'tmp/{model_name}_solution.txt').open('r') as f:
             for line in f:
                 if 'objective value' in line:
                     continue
@@ -2798,17 +2882,7 @@ class Team_Optimization:
             nb_suboptimal=i,
         )
 
-    def suboptimals(self, model_name, iterations=3, cutoff_search='first_transfer'):
-        """Solves model and gives suboptimal solution
-
-        Args:
-            model_name (string): Model name
-            iterations (int): Iteration
-            cutoff_search (str): Suboptimal solving method
-
-        Returns:
-            (dict): Dictionnary of hashes representing transfers
-        """
+    def suboptimals(self, model_name: str, iterations: int = 3, cutoff_search: str = 'first_transfer') -> dict:
         sa = {}
 
         for i in range(iterations):
@@ -2819,28 +2893,28 @@ class Team_Optimization:
                 # Select the players that have been transfered in/out
                 if cutoff_search == 'first_buy':
                     actions = so.expr_sum(
-                        self.buy[p, self.start] for p in self.players if self.buy[p, self.start].get_value() > 0.5
+                        self.buy[p, self.start] for p in self.players if self.buy[p, self.start].get_value() > 0
                     )
                     gw_range = [self.start]
                 elif cutoff_search == 'horizon_buy':
                     actions = so.expr_sum(
-                        so.expr_sum(self.buy[p, w] for p in self.players if self.buy[p, w].get_value() > 0.5)
+                        so.expr_sum(self.buy[p, w] for p in self.players if self.buy[p, w].get_value() > 0)
                         for w in self.gameweeks
                     )
                     gw_range = self.gameweeks
                 elif cutoff_search == 'first_transfer':
                     actions = so.expr_sum(
-                        self.buy[p, self.start] for p in self.players if self.buy[p, self.start].get_value() > 0.5
+                        self.buy[p, self.start] for p in self.players if self.buy[p, self.start].get_value() > 0
                     ) + so.expr_sum(
-                        self.sell[p, self.start] for p in self.players if self.sell[p, self.start].get_value() > 0.5
+                        self.sell[p, self.start] for p in self.players if self.sell[p, self.start].get_value() > 0
                     )
                     gw_range = [self.start]
                 elif cutoff_search == 'horizon_transfer':
                     actions = so.expr_sum(
-                        so.expr_sum(self.buy[p, w] for p in self.players if self.buy[p, w].get_value() > 0.5)
+                        so.expr_sum(self.buy[p, w] for p in self.players if self.buy[p, w].get_value() > 0)
                         for w in self.gameweeks
                     ) + so.expr_sum(
-                        so.expr_sum(self.sell[p, w] for p in self.players if self.sell[p, w].get_value() > 0.5)
+                        so.expr_sum(self.sell[p, w] for p in self.players if self.sell[p, w].get_value() > 0)
                         for w in self.gameweeks
                     )
                     gw_range = self.gameweeks
@@ -2860,26 +2934,20 @@ class Team_Optimization:
 
             if self.freehit[self.start].get_value():
                 sa[i] = [
-                    [p for p in self.players if self.team_fh[p, self.start].get_value() > 0.5],
+                    [p for p in self.players if self.team_fh[p, self.start].get_value() > 0],
                     [],
                     self.model.get_objective_value(),
                 ]
             else:
                 sa[i] = [
-                    [p for p in self.players if self.buy[p, self.start].get_value() > 0.5],
-                    [p for p in self.players if self.sell[p, self.start].get_value() > 0.5],
+                    [p for p in self.players if self.buy[p, self.start].get_value() > 0],
+                    [p for p in self.players if self.sell[p, self.start].get_value() > 0],
                     self.model.get_objective_value(),
                 ]
 
         return sa
 
-    def sensitivity_analysis(self, repeats=3, iterations=3, parameters={'model_name': 'sa'}):
-        """Solving model with randomized EV
-
-        Args:
-            repeats (int): Repeating the randomization/solving
-            iterations (int): Iterations of suboptimals
-        """
+    def sensitivity_analysis(self, repeats: int = 3, iterations: int = 3, parameters: dict = {'model_name': 'sa'}):  # noqa: ANN201, B006
         podium = pd.DataFrame(columns=list(np.arange(1, 4)))
         hashes = {}
         raw_data = self.data.copy()
@@ -2900,8 +2968,8 @@ class Team_Optimization:
             yield 1
 
             # Store data
-            for i, (k, v) in enumerate(sa.items()):
-                transfer = hash(tuple((tuple(v[0]), tuple(v[1]))))
+            for i, v in enumerate(sa.values()):
+                transfer = hash((tuple(v[0]), tuple(v[1])))
                 hashes[transfer] = v
 
                 if transfer in podium.index:
@@ -2917,92 +2985,80 @@ class Team_Optimization:
                 podium.loc[transfer, f'EV_{int(num_cols)}'] = v[2]
 
         podium.fillna(0).to_csv('tmp/podium.csv')
-        with open('tmp/hashes.json', 'w') as outfile:
+        with Path('tmp/hashes.json').open('w') as outfile:
             json.dump(hashes, outfile)
 
 
 if __name__ == '__main__':
-    os.makedirs('tmp/', exist_ok=True)
+    Path('tmp/').mkdir(parents=True, exist_ok=True)
 
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
     logger: logging.Logger = logging.getLogger(__name__)
 
-    with open('info.json') as f:
+    with Path('info.json').open() as f:
         info = json.load(f)
         team_id = info['team-id']
 
-    to = Team_Optimization(team_id=team_id, horizon=3, noise=False, premium=True)
+    to = TeamOptimization(team_id=team_id, horizon=3, noise=False, premium=True)
 
     to.build_model(
-        model_name='vanilla',
-        freehit_gw=-1,
-        wildcard_gw=-1,
-        bboost_gw=-1,
-        threexc_gw=-1,
-        objective_type='decay',
-        decay_gameweek=0.85,
-        vicecap_decay=0.1,
-        decay_bench=[0.03, 0.21, 0.06, 0.002],
-        ft_val=1.1,
-        itb_val=0.008,
-        hit_val=6,
-        goalkeeper_max_budget=10,
-        def_stack_limit=2,
+        {
+            'model_name': 'vanilla',
+            'freehit_gw': -1,
+            'wildcard_gw': -1,
+            'bboost_gw': -1,
+            'threexc_gw': -1,
+            'objective_type': 'decay',
+            'decay_gameweek': 0.85,
+            'vicecap_decay': 0.1,
+            'decay_bench': [0.03, 0.21, 0.06, 0.002],
+            'ft_val': 1.1,
+            'itb_val': 0.008,
+            'hit_val': 6,
+            'goalkeeper_max_budget': 10,
+            'def_stack_limit': 2,
+        }
     )
 
-    # to.differential_model(
-    #     nb_differentials=3,
-    #     threshold=10,
-    #     target='Top_100K')
+    to.differential_model(nb_differentials=3, threshold=10, target='Top_100K')
 
-    # to.automated_chips_model(
-    #     objective_type='decay',
-    #     decay_gameweek=0.9,
-    #     vicecap_decay=0.1,
-    #     decay_bench=[0.03, 0.21, 0.06, 0.002],
-    #     ft_val=1.5,
-    #     itb_val=0.008,
-    #     hit_val=6)
+    to.automated_chips_model(
+        {
+            'objective_type': 'decay',
+            'decay_gameweek': 0.9,
+            'vicecap_decay': 0.1,
+            'decay_bench': [0.03, 0.21, 0.06, 0.002],
+            'ft_val': 1.5,
+            'itb_val': 0.008,
+            'hit_val': 6,
+        }
+    )
 
-    # to.advanced_wildcard(
-    #     freehit_gw=-1,
-    #     bboost_gw=-1,
-    #     threexc_gw=-1,
-    #     objective_type='decay',
-    #     decay_gameweek=0.9,
-    #     vicecap_decay=0.1,
-    #     decay_bench=[0.03, 0.21, 0.06, 0.002],
-    #     ft_val=1.5,
-    #     itb_val=0.008,
-    #     hit_val=6)
+    to.advanced_wildcard(
+        {
+            'freehit_gw': -1,
+            'bboost_gw': -1,
+            'threexc_gw': -1,
+            'objective_type': 'decay',
+            'decay_gameweek': 0.9,
+            'vicecap_decay': 0.1,
+            'decay_bench': [0.03, 0.21, 0.06, 0.002],
+            'ft_val': 1.5,
+            'itb_val': 0.008,
+            'hit_val': 6,
+        }
+    )
 
-    # to.biased_model(
-    #     love={
-    #         'buy': {},
-    #         'start': {},
-    #         'team': {},
-    #         'cap': {}
-    #     },
-    #     hate={
-    #         'sell': {},
-    #         'team': {},
-    #         'bench': {}
-    #     },
-    #     hit_limit={
-    #         'max': {},
-    #         'eq': {},
-    #         'min': {}
-    #     },
-    #     two_ft_gw=[])
+    to.biased_model(
+        love={'buy': {}, 'start': {}, 'team': {}, 'cap': {}},
+        hate={'sell': {}, 'team': {}, 'bench': {}},
+        hit_limit={'max': {}, 'eq': {}, 'min': {}},
+        two_ft_gw=[],
+    )
 
     to.solve(model_name='vanilla', log=True, time_lim=0)
 
-    # to.suboptimals(
-    #     model_name="vanilla",
-    #     iterations=3,
-    #     cutoff_search='first_transfer')
+    to.suboptimals(model_name='vanilla', iterations=3, cutoff_search='first_transfer')
 
-    # for _ in to.sensitivity_analysis(
-    #     repeats=10,
-    #     iterations=5):
-    #     pass
+    for _ in to.sensitivity_analysis(repeats=10, iterations=5):
+        pass
