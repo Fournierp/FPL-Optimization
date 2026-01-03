@@ -1,98 +1,50 @@
-from pathlib import Path
-import pandas as pd
-import numpy as np
-
-import os
-from subprocess import Popen, DEVNULL
-import sasoptpy as so
-import logging
 import json
+import logging
+import os
 from concurrent.futures import ProcessPoolExecutor
+from subprocess import DEVNULL, Popen
+
+import numpy as np
+import pandas as pd
+import sasoptpy as so
 
 from src.utils import (
-    get_season,
-    get_team,
-    get_predictions,
-    get_rolling,
-    pretty_print,
     get_chips,
-    get_next_gameweek,
     get_ownership_data,
+    get_rolling,
+    get_team,
+    pretty_print,
     randomize,
 )
 
 
 class Team_Optimization:
-    """Mathematical optimization of FPL"""
+    def __init__(self, params: dict) -> None:
+        self.filter_ev = params['filter_ev']
+        self.horizon = params['horizon']
+        self.ownership = params['ownership']
+        self.predictions = params['predictions']
+        self.start = params['start']
 
-    def __init__(
-        self, team_id=33092, horizon=5, noise=False, premium=False, ownership=False, predictions=None, filter_ev=None
-    ):
-        """
+        self.get_data(params['team_id'])
 
-        Args:
-            team_id (int): Team to optimize
-            horizon (int): Planning horizon
-            noise (bool): Apply noise
-            premium (bool, optional): Load premium data.
-            ownership (bool, optional): Load ownership data.
-            predictions (pd.DataFrame): Manually provide prediction data
-            filter_ev (int): Minimum amount of EV to be considered in the planning
-        """
-        self.horizon = horizon
-        self.premium = premium
-        self.ownership = ownership
-        self.predictions = predictions
-        self.filter_ev = filter_ev
+        if params['noise']:
+            self.data = randomize(42, self.data, self.start)
 
-        if self.predictions is None:
-            season_data = get_season()
-        else:
-            season_data = False
-
-        self.get_data(team_id, season_data)
-
-        if noise:
-            self.random_noise(None)
-
-    def get_data(self, team_id, season):
-        """Get EV& Ownership data along with team data
-
-        Args:
-            team_id (int): Team to optimize
-            season (int): Season
-        """
-        # Data collection
-        # Predicted points from https://fplreview.com/
-        PROJECTIONS_PATH = Path('data/projections')
-        next_gameweek = get_next_gameweek()
-        csv_path = PROJECTIONS_PATH / f'enriched_expected_points_GW{next_gameweek}.csv'
-        df = pd.read_csv(csv_path)
-        df = df.rename(
-            columns={
-                'purchase_price': 'BV',
-                'selling_price': 'SV',
-                'NAME': 'Name',
-                'POSITION': 'Pos',
-                'TEAM': 'Team',
-            }
-        )
-
-        self.team_names = df.Team.unique().tolist()
-        self.data = df.copy()
+    def get_data(self, team_id: int) -> None:
+        # Projection data
+        self.team_names = self.predictions.Team.unique().tolist()
+        self.data = self.predictions.copy()
         self.data = self.data.dropna(subset=['fpl_id'])
         self.data['fpl_id'] = self.data['fpl_id'].astype(int)
         self.data = self.data.set_index('fpl_id')
         # One hot encoded values for the constraints
-        self.data = pd.concat([self.data, pd.get_dummies(self.data.Pos, dtype=int)], axis=1)
+        self.data = pd.concat([self.data, pd.get_dummies(self.data.Position, dtype=int)], axis=1)
         self.data = pd.concat([self.data, pd.get_dummies(self.data.Team, dtype=int)], axis=1)
 
         # FPL data
-        self.start = get_next_gameweek()
-
         if self.start != 1:
             if self.ownership:
-                # Ownership data
                 ownership = get_ownership_data()
                 self.data = pd.concat([self.data, ownership], axis=1, join='inner')
 
@@ -101,36 +53,35 @@ class Team_Optimization:
                 team_id, self.start - 1
             )
 
-            # GW
-            self.period = min(self.horizon, len([col for col in df.columns if 'GW' in col]))
+            self.period = min(self.horizon, len([col for col in self.data.columns if 'GW' in col]))
             (self.rolling_transfer, self.transfer) = get_rolling(team_id, self.start - 1)
 
         else:
             self.initial_team, self.bank = [0 for i in range(15)], 100
             (self.freehit_used, self.wildcard_used, self.bboost_used, self.threexc_used) = 0, 0, 0, 0
 
-            # GW
-            self.period = min(self.horizon, len([col for col in df.columns if 'GW' in col]))
+            self.period = min(self.horizon, len([col for col in self.data.columns if 'GW' in col]))
             (self.rolling_transfer, self.transfer) = 0, 0
 
-        self.budget = np.sum(self.data.loc[self.initial_team, 'SV']) + self.bank
+        self.budget = np.sum(self.data.loc[self.initial_team, 'selling_price']) + self.bank
 
         self.all_gameweeks = np.arange(self.start - 1, self.start + self.period)
         self.gameweeks = np.arange(self.start, self.start + self.period)
 
         # Sort DF by EV for efficient optimization
-        self.data['total_ev'] = self.data[[col for col in df.columns if 'GW' in col]].sum(axis=1)
-        self.data.sort_values(by=['total_ev'], ascending=[False], inplace=True)
+        self.data['total_ev'] = self.data[[col for col in self.data.columns if 'GW' in col]].sum(axis=1)
+        self.data = self.data.sort_values(by=['total_ev'], ascending=[False])
 
         # Drop players that are not predicted to play much to reduce the search space
         if self.filter_ev is not None:
             print(
-                f'Droped {self.data[self.data.total_ev <= self.filter_ev].shape[0]} players because they have no projected points.'
+                f'Droped {self.data[self.data.total_ev <= self.filter_ev].shape[0]} players '
+                f'because they have no projected points.'
             )
-            self.data.drop(self.data[self.data.total_ev <= self.filter_ev].index, inplace=True)
+            self.data = self.data.drop(self.data[self.data.total_ev <= self.filter_ev].index)
         self.players = self.data.index.tolist()
 
-        self.initial_team_df = pd.DataFrame([], columns=['GW', 'Name', 'Pos', 'Team', 'SV'])
+        self.initial_team_df = pd.DataFrame([], columns=['GW', 'Name', 'Position', 'Team', 'selling_price'])
 
         for p in self.initial_team:
             self.initial_team_df = pd.concat(
@@ -141,41 +92,15 @@ class Team_Optimization:
                             {
                                 'GW': self.start - 1,
                                 'Name': self.data.loc[p]['Name'],
-                                'Pos': self.data.loc[p]['Pos'],
+                                'Position': self.data.loc[p]['Position'],
                                 'Team': self.data.loc[p]['Team'],
-                                'SV': self.data.loc[p]['SV'],
+                                'selling_price': self.data.loc[p]['selling_price'],
                             }
                         ]
                     ),
                 ),
                 ignore_index=True,
             )
-
-        # Print summary
-        print('Team Optimization initialized:')
-        print(f' - Team ID: {team_id}')
-        print(f' - Planning Horizon: {self.period} GW(s)')
-        print(f' - Bank: {self.bank:.1f}')
-        print(f' - Budget: {self.budget}')
-        print(f' - Rolling Transfers: {self.rolling_transfer}')
-        print(f' - Free Hit used: {self.freehit_used}')
-        print(f' - Wildcard used: {self.wildcard_used}')
-        print(f' - Bench Boost used: {self.bboost_used}')
-        print(f' - Triple Captain used: {self.threexc_used}')
-        print('Team:')
-        print(self.initial_team_df)
-        print()
-        print('Data:')
-        print(self.data)
-
-    def random_noise(self, seed):
-        """Apply random Normal noise to EV Data
-
-        Args:
-            seed (int): Seed the RNG
-        """
-        # Apply random noise
-        self.data = randomize(seed, self.data, self.start)
 
     def build_model(
         self,
@@ -575,10 +500,10 @@ class Team_Optimization:
 
         # Budget
         sold_amount = {
-            w: so.expr_sum(self.sell[p, w] * self.data.loc[p, 'SV'] for p in self.players) for w in self.gameweeks
+            w: so.expr_sum(self.sell[p, w] * self.data.loc[p, 'selling_price'] for p in self.players) for w in self.gameweeks
         }
         bought_amount = {
-            w: so.expr_sum(self.buy[p, w] * self.data.loc[p, 'BV'] for p in self.players) for w in self.gameweeks
+            w: so.expr_sum(self.buy[p, w] * self.data.loc[p, 'purchase_price'] for p in self.players) for w in self.gameweeks
         }
         # The cost of the squad must exceed the budget
         self.model.add_constraints(
@@ -607,8 +532,8 @@ class Team_Optimization:
         self.model.add_constraints(
             (
                 self.in_the_bank[w - 1]
-                + so.expr_sum(self.team[p, w - 1] * self.data.loc[p, 'SV'] for p in self.players)
-                >= so.expr_sum(self.team_fh[p, w] * self.data.loc[p, 'BV'] for p in self.players)
+                + so.expr_sum(self.team[p, w - 1] * self.data.loc[p, 'selling_price'] for p in self.players)
+                >= so.expr_sum(self.team_fh[p, w] * self.data.loc[p, 'purchase_price'] for p in self.players)
                 for w in self.gameweeks
             ),
             name='budget_fh',
@@ -633,7 +558,7 @@ class Team_Optimization:
         )
 
         goalkeeper_cost = {
-            w: so.expr_sum(self.team[p, w] * self.data.loc[p, 'BV'] * self.data.loc[p, 'GK'] for p in self.players)
+            w: so.expr_sum(self.team[p, w] * self.data.loc[p, 'purchase_price'] * self.data.loc[p, 'GK'] for p in self.players)
             for w in self.gameweeks
         }
         self.model.add_constraints(
@@ -641,7 +566,7 @@ class Team_Optimization:
         )
 
         goalkeeper_cost_fh = {
-            w: so.expr_sum(self.team_fh[p, w] * self.data.loc[p, 'BV'] * self.data.loc[p, 'GK'] for p in self.players)
+            w: so.expr_sum(self.team_fh[p, w] * self.data.loc[p, 'purchase_price'] * self.data.loc[p, 'GK'] for p in self.players)
             for w in self.gameweeks
         }
         self.model.add_constraints(
@@ -1175,10 +1100,10 @@ class Team_Optimization:
 
         # Budget
         sold_amount = {
-            w: so.expr_sum(self.sell[p, w] * self.data.loc[p, 'SV'] for p in self.players) for w in self.gameweeks
+            w: so.expr_sum(self.sell[p, w] * self.data.loc[p, 'selling_price'] for p in self.players) for w in self.gameweeks
         }
         bought_amount = {
-            w: so.expr_sum(self.buy[p, w] * self.data.loc[p, 'BV'] for p in self.players) for w in self.gameweeks
+            w: so.expr_sum(self.buy[p, w] * self.data.loc[p, 'purchase_price'] for p in self.players) for w in self.gameweeks
         }
         # The cost of the squad must exceed the budget
         self.model.add_constraints(
@@ -1207,8 +1132,8 @@ class Team_Optimization:
         self.model.add_constraints(
             (
                 self.in_the_bank[w - 1]
-                + so.expr_sum(self.team[p, w - 1] * self.data.loc[p, 'SV'] for p in self.players)
-                >= so.expr_sum(self.team_fh[p, w] * self.data.loc[p, 'BV'] for p in self.players)
+                + so.expr_sum(self.team[p, w - 1] * self.data.loc[p, 'selling_price'] for p in self.players)
+                >= so.expr_sum(self.team_fh[p, w] * self.data.loc[p, 'purchase_price'] for p in self.players)
                 for w in self.gameweeks
             ),
             name='budget_fh',
@@ -1233,7 +1158,7 @@ class Team_Optimization:
         )
 
         goalkeeper_cost = {
-            w: so.expr_sum(self.team[p, w] * self.data.loc[p, 'BV'] * self.data.loc[p, 'GK'] for p in self.players)
+            w: so.expr_sum(self.team[p, w] * self.data.loc[p, 'purchase_price'] * self.data.loc[p, 'GK'] for p in self.players)
             for w in self.gameweeks
         }
         self.model.add_constraints(
@@ -1241,7 +1166,7 @@ class Team_Optimization:
         )
 
         goalkeeper_cost_fh = {
-            w: so.expr_sum(self.team_fh[p, w] * self.data.loc[p, 'BV'] * self.data.loc[p, 'GK'] for p in self.players)
+            w: so.expr_sum(self.team_fh[p, w] * self.data.loc[p, 'purchase_price'] * self.data.loc[p, 'GK'] for p in self.players)
             for w in self.gameweeks
         }
         self.model.add_constraints(
@@ -1655,10 +1580,10 @@ class Team_Optimization:
 
         # Budget
         sold_amount = {
-            w: so.expr_sum(self.sell[p, w] * self.data.loc[p, 'SV'] for p in self.players) for w in self.gameweeks
+            w: so.expr_sum(self.sell[p, w] * self.data.loc[p, 'selling_price'] for p in self.players) for w in self.gameweeks
         }
         bought_amount = {
-            w: so.expr_sum(self.buy[p, w] * self.data.loc[p, 'BV'] for p in self.players) for w in self.gameweeks
+            w: so.expr_sum(self.buy[p, w] * self.data.loc[p, 'purchase_price'] for p in self.players) for w in self.gameweeks
         }
         # The cost of the squad must exceed the budget
         self.model.add_constraints(
@@ -1687,8 +1612,8 @@ class Team_Optimization:
         self.model.add_constraints(
             (
                 self.in_the_bank[w - 1]
-                + so.expr_sum(self.team[p, w - 1] * self.data.loc[p, 'SV'] for p in self.players)
-                >= so.expr_sum(self.team_fh[p, w] * self.data.loc[p, 'BV'] for p in self.players)
+                + so.expr_sum(self.team[p, w - 1] * self.data.loc[p, 'selling_price'] for p in self.players)
+                >= so.expr_sum(self.team_fh[p, w] * self.data.loc[p, 'purchase_price'] for p in self.players)
                 for w in self.gameweeks
             ),
             name='budget_fh',
@@ -1713,7 +1638,7 @@ class Team_Optimization:
         )
 
         goalkeeper_cost = {
-            w: so.expr_sum(self.team[p, w] * self.data.loc[p, 'BV'] * self.data.loc[p, 'GK'] for p in self.players)
+            w: so.expr_sum(self.team[p, w] * self.data.loc[p, 'purchase_price'] * self.data.loc[p, 'GK'] for p in self.players)
             for w in self.gameweeks
         }
         self.model.add_constraints(
@@ -1721,7 +1646,7 @@ class Team_Optimization:
         )
 
         goalkeeper_cost_fh = {
-            w: so.expr_sum(self.team_fh[p, w] * self.data.loc[p, 'BV'] * self.data.loc[p, 'GK'] for p in self.players)
+            w: so.expr_sum(self.team_fh[p, w] * self.data.loc[p, 'purchase_price'] * self.data.loc[p, 'GK'] for p in self.players)
             for w in self.gameweeks
         }
         self.model.add_constraints(
@@ -2158,10 +2083,10 @@ class Team_Optimization:
 
         # Budget
         sold_amount = {
-            w: so.expr_sum(self.sell[p, w] * self.data.loc[p, 'SV'] for p in self.players) for w in self.gameweeks
+            w: so.expr_sum(self.sell[p, w] * self.data.loc[p, 'selling_price'] for p in self.players) for w in self.gameweeks
         }
         bought_amount = {
-            w: so.expr_sum(self.buy[p, w] * self.data.loc[p, 'BV'] for p in self.players) for w in self.gameweeks
+            w: so.expr_sum(self.buy[p, w] * self.data.loc[p, 'purchase_price'] for p in self.players) for w in self.gameweeks
         }
         # The cost of the squad must exceed the budget
         self.model.add_constraints(
@@ -2190,8 +2115,8 @@ class Team_Optimization:
         self.model.add_constraints(
             (
                 self.in_the_bank[w - 1]
-                + so.expr_sum(self.team[p, w - 1] * self.data.loc[p, 'SV'] for p in self.players)
-                >= so.expr_sum(self.team_fh[p, w] * self.data.loc[p, 'BV'] for p in self.players)
+                + so.expr_sum(self.team[p, w - 1] * self.data.loc[p, 'selling_price'] for p in self.players)
+                >= so.expr_sum(self.team_fh[p, w] * self.data.loc[p, 'purchase_price'] for p in self.players)
                 for w in self.gameweeks
             ),
             name='budget_fh',
@@ -2216,7 +2141,7 @@ class Team_Optimization:
         )
 
         goalkeeper_cost = {
-            w: so.expr_sum(self.team[p, w] * self.data.loc[p, 'BV'] * self.data.loc[p, 'GK'] for p in self.players)
+            w: so.expr_sum(self.team[p, w] * self.data.loc[p, 'purchase_price'] * self.data.loc[p, 'GK'] for p in self.players)
             for w in self.gameweeks
         }
         self.model.add_constraints(
@@ -2224,7 +2149,7 @@ class Team_Optimization:
         )
 
         goalkeeper_cost_fh = {
-            w: so.expr_sum(self.team_fh[p, w] * self.data.loc[p, 'BV'] * self.data.loc[p, 'GK'] for p in self.players)
+            w: so.expr_sum(self.team_fh[p, w] * self.data.loc[p, 'purchase_price'] * self.data.loc[p, 'GK'] for p in self.players)
             for w in self.gameweeks
         }
         self.model.add_constraints(
@@ -2657,10 +2582,10 @@ class Team_Optimization:
 
         # Budget
         sold_amount = {
-            w: so.expr_sum(self.sell[p, w] * self.data.loc[p, 'SV'] for p in self.players) for w in self.gameweeks
+            w: so.expr_sum(self.sell[p, w] * self.data.loc[p, 'selling_price'] for p in self.players) for w in self.gameweeks
         }
         bought_amount = {
-            w: so.expr_sum(self.buy[p, w] * self.data.loc[p, 'BV'] for p in self.players) for w in self.gameweeks
+            w: so.expr_sum(self.buy[p, w] * self.data.loc[p, 'purchase_price'] for p in self.players) for w in self.gameweeks
         }
         # The cost of the squad must exceed the budget
         self.model.add_constraints(
@@ -2689,8 +2614,8 @@ class Team_Optimization:
         self.model.add_constraints(
             (
                 self.in_the_bank[w - 1]
-                + so.expr_sum(self.team[p, w - 1] * self.data.loc[p, 'SV'] for p in self.players)
-                >= so.expr_sum(self.team_fh[p, w] * self.data.loc[p, 'BV'] for p in self.players)
+                + so.expr_sum(self.team[p, w - 1] * self.data.loc[p, 'selling_price'] for p in self.players)
+                >= so.expr_sum(self.team_fh[p, w] * self.data.loc[p, 'purchase_price'] for p in self.players)
                 for w in self.gameweeks
             ),
             name='budget_fh',
@@ -2715,7 +2640,7 @@ class Team_Optimization:
         )
 
         goalkeeper_cost = {
-            w: so.expr_sum(self.team[p, w] * self.data.loc[p, 'BV'] * self.data.loc[p, 'GK'] for p in self.players)
+            w: so.expr_sum(self.team[p, w] * self.data.loc[p, 'purchase_price'] * self.data.loc[p, 'GK'] for p in self.players)
             for w in self.gameweeks
         }
         self.model.add_constraints(
@@ -2723,7 +2648,7 @@ class Team_Optimization:
         )
 
         goalkeeper_cost_fh = {
-            w: so.expr_sum(self.team_fh[p, w] * self.data.loc[p, 'BV'] * self.data.loc[p, 'GK'] for p in self.players)
+            w: so.expr_sum(self.team_fh[p, w] * self.data.loc[p, 'purchase_price'] * self.data.loc[p, 'GK'] for p in self.players)
             for w in self.gameweeks
         }
         self.model.add_constraints(

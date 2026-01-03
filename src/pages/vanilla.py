@@ -10,15 +10,17 @@ from matplotlib import patches
 from src.team_optimization import Team_Optimization
 from src.utils import bezier_path, get_next_gameweek
 
+PROJECTIONS_PATH = Path('data/projections')
 
-def get_parameter_inputs(start: int) -> dict:
+
+def get_parameter_inputs(max_horizon: int) -> dict:
     params = {}
 
     with st.expander('Parameters', expanded=True):
         col1, col2 = st.columns(2)
         with col1:
             params['horizon'] = st.slider(
-                'Horizon', min_value=1, max_value=min(39 - start, 9), value=min(39 - start, 5), step=1
+                'Horizon', min_value=1, max_value=max_horizon, value=min(max_horizon, 5), step=1
             )
         with col2:
             params['premium'] = st.selectbox('Data type', ['Premium', 'Free'], 0)
@@ -67,7 +69,7 @@ def draw_team_column(  # noqa: PLR0913
     gw: str = 'Base',
 ) -> None:
     for j, row in team_df.iterrows():
-        rectangle = patches.Rectangle((col_x, 14 - j), 12, 0.75, facecolor=color_position[row['Pos']])
+        rectangle = patches.Rectangle((col_x, 14 - j), 12, 0.75, facecolor=color_position[row['Position']])
         ax.add_patch(rectangle)
         rx, ry = rectangle.get_xy()
         cx = rx + rectangle.get_width() / 2.0
@@ -95,11 +97,11 @@ def draw_team_column(  # noqa: PLR0913
 
 
 def draw_transfers(ax, team_from: pd.DataFrame, team_to: pd.DataFrame, col_from: float, col_to: float) -> None:  # noqa: ANN001
-    transfers = pd.concat([team_from, team_to], ignore_index=True)[['Name', 'Pos']]
+    transfers = pd.concat([team_from, team_to], ignore_index=True)[['Name', 'Position']]
     transfers = transfers.drop_duplicates(keep=False).sort_index()
 
     for pos in ['G', 'D', 'M', 'F']:
-        transfer_ = transfers.loc[transfers.Pos == pos]
+        transfer_ = transfers.loc[transfers.Position == pos]
 
         for _ in range(int(transfer_.shape[0] / 2)):
             ax.add_patch(
@@ -140,9 +142,17 @@ def display_team_visualization(to: Team_Optimization, df: pd.DataFrame, chip_str
     plt.close(fig)
 
 
-def run_optimization(params: dict, team_id: int) -> None:
+def run_optimization(params: dict, team_id: int, start: int, projection_data: pd.DataFrame) -> None:
     to = Team_Optimization(
-        team_id=team_id, horizon=params['horizon'], noise=False, premium=params['premium'] == 'Premium'
+        {
+            'filter_ev': None,
+            'horizon': params['horizon'],
+            'noise': False,
+            'ownership': False,
+            'predictions': projection_data,
+            'start': start,
+            'team_id': team_id,
+        }
     )
 
     to.build_model(
@@ -174,7 +184,12 @@ def write() -> None:
     plt.style.use('.streamlit/style.mplstyle')
     start = get_next_gameweek()
 
-    params = get_parameter_inputs(start)
+    csv_path = PROJECTIONS_PATH / f'enriched_expected_points_GW{start}.csv'
+    projection_data = pd.read_csv(csv_path)
+
+    max_horizon = len([col for col in projection_data.columns if 'GW' in col])
+
+    params = get_parameter_inputs(max_horizon)
 
     if st.button('Run Optimization'):
         with Path('info.json').open() as f:
@@ -182,4 +197,4 @@ def write() -> None:
             team_id = info['team-id']
 
         with st.spinner('Running Optimization ...'):
-            run_optimization(params, team_id)
+            run_optimization(params, team_id, start, projection_data)
