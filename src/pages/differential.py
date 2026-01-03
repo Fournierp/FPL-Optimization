@@ -70,6 +70,22 @@ def run_optimization(
 def write() -> None:
     st.title('FPL - Differential Model')
 
+    with st.expander('📖 Instructions', expanded=False):
+        st.markdown(
+            """
+            **Differential Optimization** - Target low-ownership players to differentiate from rivals.
+
+            This model helps you build a team with differential picks.
+            Perfect for mini-leagues where you need to take calculated risks to climb the rankings.
+
+            **Key Parameters:**
+            - **Horizon & Decay**: Standard planning parameters
+            - **Ownership threshold**: Ownership % above which players are penalized (e.g., 40%)
+            - **Ownership penalty**: How heavily to penalize high-ownership players (e.g., 0.3 points per % ownership)
+            - **Transfer settings**: Manage your transfer budget
+            """
+        )
+
     plt.style.use('.streamlit/style.mplstyle')
     start = get_next_gameweek()
 

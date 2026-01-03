@@ -71,6 +71,27 @@ def run_optimization(
 def write() -> None:
     st.title('FPL - Wildcard Model')
 
+    with st.expander('📖 Instructions', expanded=False):
+        st.markdown(
+            """
+            **Wildcard Optimization** - Plan optimal wildcard usage with iterative multi-horizon optimization.
+
+            The wildcard chip allows unlimited free transfers for one gameweek. This model solves the optimization
+            iteratively across three time horizons to balance immediate gains with long-term squad value:
+
+            **Optimization Approach:**
+            - **Long-term phase**: First optimizes for the full horizon with heavy decay to establish a strong
+            foundation
+            - **Medium-term phase**: Refines the solution for mid-range gameweeks with moderate decay
+            - **Short-term phase**: Final optimization for immediate gameweeks with light decay to maximize near-term
+            points
+
+            **Decay Parameters:**
+            - Adjust decay rates to control how much each phase prioritizes different time horizons
+            - Lower decay = more emphasis on short term performance
+            """
+        )
+
     plt.style.use('.streamlit/style.mplstyle')
     start = get_next_gameweek()
 

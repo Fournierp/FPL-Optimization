@@ -1,6 +1,3 @@
-import json
-from pathlib import Path
-
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -176,6 +173,18 @@ def run_optimization(  # noqa: PLR0913
 
 def write() -> None:
     st.title('FPL - Biased Model')
+    with st.expander('📖 Instructions', expanded=False):
+        st.markdown(
+            """
+            **Biased Optimization** - Force specific players into your squad.
+
+            This model allows you to lock in players you want to keep (e.g., your captain pick, players with
+            great upcoming fixtures, or players you just don't want to transfer out).
+
+            **Key Parameters:**
+            - **Forced player list**: Enter player names that must be in your squad
+            """
+        )
 
     plt.style.use('.streamlit/style.mplstyle')
     start = get_next_gameweek()

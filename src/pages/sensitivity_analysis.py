@@ -411,6 +411,24 @@ def run_sensitivity_analysis(  # noqa: PLR0913
 def write() -> None:
     st.title('FPL - Sensitivity Analysis Model')
 
+    with st.expander('📖 Instructions', expanded=False):
+        st.markdown(
+            """
+            **Sensitivity Analysis** - Test the robustness of your strategy with Monte Carlo simulations.
+
+            FPL is uncertain - players get injured, rotated, or underperform. This analysis runs multiple
+            optimizations with randomized expected points to see which players appear consistently in optimal teams.
+
+            **How it works:**
+            - Runs multiple iterations (e.g., 100) with perturbed expected points
+            - Shows how often each player appears in optimal solutions
+            - Identifies robust picks (high selection %) vs risky picks (low selection %)
+
+            **Analysis Parameters:**
+            - **Iterations**: More iterations = more reliable results (but slower)
+            """
+        )
+
     plt.style.use('.streamlit/style.mplstyle')
     start = get_next_gameweek()
 

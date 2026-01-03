@@ -1,6 +1,3 @@
-import json
-from pathlib import Path
-
 import matplotlib.pyplot as plt
 import pandas as pd
 import streamlit as st
@@ -68,6 +65,20 @@ def run_optimization(params: dict, chip_vals: dict, team_id: int, start: int, pr
 
 def write() -> None:
     st.title('FPL - Automated Chips Model')
+
+    with st.expander('📖 Instructions', expanded=False):
+        st.markdown(
+            """
+            **Automated Chips Optimization** - Let the optimizer decide when to use chips based on added value.
+
+            Instead of manually choosing chip timing, this model evaluates the value each chip adds in each
+            gameweek and automatically schedules them for maximum impact.
+
+            **Chip Value Thresholds:**
+            - Set minimum expected point gains required for each chip to be activated
+            - Higher thresholds = more conservative chip usage
+            """
+        )
 
     plt.style.use('.streamlit/style.mplstyle')
     start = get_next_gameweek()

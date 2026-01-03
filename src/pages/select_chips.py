@@ -157,7 +157,7 @@ def display_team_visualization(df: pd.DataFrame, chip_strat: list, to, horizon: 
         df_prev = df_prev.sort_values(by=['Position'], key=lambda x: x.map({'GK': 0, 'DF': 1, 'MD': 2, 'FW': 3}))
         df_prev = df_prev.sort_values(by=['Start'], ascending=False)
         df_prev = df_prev.reset_index(drop=True)
-        draw_transfers(ax, df_prev, df_gw, to, i , gw)
+        draw_transfers(ax, df_prev, df_gw, to, i, gw)
 
     st.pyplot(fig, ax)
     plt.close(fig)
@@ -206,6 +206,16 @@ def run_optimization(params: dict, chips: dict, team_id: int, start: int, projec
 
 def write() -> None:
     st.title('FPL - Select Chips Model')
+
+    with st.expander('📖 Instructions', expanded=False):
+        st.markdown(
+            """
+            **Select Chips Optimization** - Manually specify which chips to use and when.
+
+            This model gives you full control over chip timing. You decide when to use Wildcard, Free Hit,
+            Bench Boost, and Triple Captain, and the optimizer will build the best strategy around your choices.
+            """
+        )
 
     plt.style.use('.streamlit/style.mplstyle')
 

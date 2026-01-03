@@ -110,7 +110,9 @@ def draw_transfers(ax, team_from: pd.DataFrame, team_to: pd.DataFrame, col_from:
             transfer_ = transfer_.drop([transfer_.head(1).index[0], transfer_.tail(1).index[0]])
 
 
-def display_team_visualization(initial_team_df: pd.DataFrame, planned_team_df: pd.DataFrame, chip_strat: list, horizon: int) -> None:
+def display_team_visualization(
+    initial_team_df: pd.DataFrame, planned_team_df: pd.DataFrame, chip_strat: list, horizon: int
+) -> None:
     fig, ax = plt.subplots(figsize=(16, 12))
     ax.set_ylim(0, 15 + 1)
     ax.set_xlim(0, (horizon + 1) * 16 + 2.5)
@@ -184,6 +186,18 @@ def run_optimization(params: dict, team_id: int, start: int, projection_data: pd
 
 def write() -> None:
     st.title('FPL - Vanilla Model')
+
+    with st.expander('📖 Instructions', expanded=False):
+        st.markdown("""
+            **Vanilla Optimization** - Standard team optimization with basic FPL constraints.
+
+            **Parameters:**
+            - **Horizon**: Number of gameweeks to plan ahead
+            - **Decay rate**: How much to discount future gameweeks (higher = prioritize near term)
+            - **Bench weights**: Value assigned to bench positions (GK, 1st, 2nd, 3rd sub)
+            - **Transfer settings**: Free transfers, transfer cost, transfer limit per gameweek
+            """
+        )
 
     plt.style.use('.streamlit/style.mplstyle')
     start = get_next_gameweek()

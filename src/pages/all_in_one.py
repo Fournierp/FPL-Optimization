@@ -1,6 +1,3 @@
-import json
-from pathlib import Path
-
 import matplotlib.pyplot as plt
 import pandas as pd
 import streamlit as st
@@ -126,6 +123,22 @@ def run_optimization(  # noqa: PLR0913
 
 def write() -> None:
     st.title('FPL - All In One Model')
+
+    with st.expander('📖 Instructions', expanded=False):
+        st.markdown(
+            """
+            **All In One Optimization** - Combine chips, differential targeting, and forced players.
+
+            This is the most comprehensive optimization model, allowing you to use all advanced features
+            simultaneously. Perfect for complex scenarios where you need multiple constraints.
+
+            **Combined Features:**
+            - ✅ Chip selection (Wildcard, Free Hit, Bench Boost, Triple Captain)
+            - ✅ Differential targeting (ownership penalties)
+            - ✅ Forced player selection (lock in specific players)
+            - ✅ All standard optimization parameters
+            """
+        )
 
     plt.style.use('.streamlit/style.mplstyle')
     start = get_next_gameweek()
