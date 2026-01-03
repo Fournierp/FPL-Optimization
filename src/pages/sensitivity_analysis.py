@@ -9,7 +9,7 @@ import matplotlib.patches as patches
 from matplotlib.offsetbox import OffsetImage, AnnotationBbox
 from highlight_text import fig_text
 
-from src.team_optimization import Team_Optimization
+from src.team_optimization import TeamOptimization
 
 @st.cache
 def get_data():
@@ -23,7 +23,7 @@ def get_data():
         team_id = info['team-id']
         season = info['season']
 
-    to = Team_Optimization(
+    to = TeamOptimization(
         team_id=team_id,
         horizon=5,
         noise=False,
@@ -103,7 +103,7 @@ def write():
                 st.warning('Should not have more than 1 iteration or longer than 1 gw horizon')
 
             else:
-                to = Team_Optimization(
+                to = TeamOptimization(
                     team_id=team_id,
                     horizon=horizon,
                     noise=False,

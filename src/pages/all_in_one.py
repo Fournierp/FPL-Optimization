@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import matplotlib.path as mpath
 
-from src.team_optimization import Team_Optimization
+from src.team_optimization import TeamOptimization
 
 @st.cache
 def get_data():
@@ -15,7 +15,7 @@ def get_data():
         info = json.load(f)
         team_id = info['team-id']
 
-    to = Team_Optimization(
+    to = TeamOptimization(
         team_id=team_id,
         horizon=5,
         noise=False,
@@ -165,25 +165,28 @@ def write():
     if st.button('Run Optimization'):
 
         with st.spinner("Running Optimization ..."):
-            to = Team_Optimization(
+            to = TeamOptimization(
                 team_id=team_id,
                 horizon=horizon,
                 noise=False,
                 premium=True if premium=='Premium' else False)
 
             to.build_model(
-                model_name='all_in_one',
-                freehit_gw=fh_gw-start if fh_gw is not None else -1,
-                wildcard_gw=wc_gw-start if wc_gw is not None else -1,
-                bboost_gw=bb_gw-start if bb_gw is not None else -1,
-                threexc_gw=tc_gw-start if tc_gw is not None else -1,
-                objective_type='decay' if decay != 0 else 'linear',
-                decay_gameweek=decay,
-                vicecap_decay=vicecap_decay,
-                decay_bench=[gk_weight, first_bench_weight, second_bench_weight, third_bench_weight],
-                ft_val=ft_val,
-                itb_val=itb_val,
-                hit_val=hit_val)
+                {
+                    'model_name': 'all_in_one',
+                    'freehit_gw': fh_gw-start if fh_gw is not None else -1,
+                    'wildcard_gw': wc_gw-start if wc_gw is not None else -1,
+                    'bboost_gw': bb_gw-start if bb_gw is not None else -1,
+                    'threexc_gw': tc_gw-start if tc_gw is not None else -1,
+                    'objective_type': 'decay' if decay != 0 else 'linear',
+                    'decay_gameweek': decay,
+                    'vicecap_decay': vicecap_decay,
+                    'decay_bench': [gk_weight, first_bench_weight, second_bench_weight, third_bench_weight],
+                    'ft_val': ft_val,
+                    'itb_val': itb_val,
+                    'hit_val': hit_val,
+                }
+            )
 
             to.differential_model(
                 nb_differentials=nb_diff,

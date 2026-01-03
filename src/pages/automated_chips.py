@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import matplotlib.path as mpath
 
-from src.team_optimization import Team_Optimization
+from src.team_optimization import TeamOptimization
 from src.utils import get_next_gameweek
 
 
@@ -74,24 +74,27 @@ def write():
             team_id = info['team-id']
 
         with st.spinner("Running Optimization ..."):
-            to = Team_Optimization(
+            to = TeamOptimization(
                 team_id=team_id,
                 horizon=horizon,
                 noise=False,
                 premium=True if premium=='Premium' else False)
 
             to.automated_chips_model(
-                objective_type='decay' if decay != 0 else 'linear',
-                decay_gameweek=decay,
-                vicecap_decay=vicecap_decay,
-                decay_bench=[gk_weight, first_bench_weight, second_bench_weight, third_bench_weight],
-                ft_val=ft_val,
-                itb_val=itb_val,
-                hit_val=hit_val,
-                triple_val=tc_val,
-                bboost_val=bb_val,
-                freehit_val=fh_val,
-                wildcard_val=wc_val)
+                {
+                    'objective_type': 'decay' if decay != 0 else 'linear',
+                    'decay_gameweek': decay,
+                    'vicecap_decay': vicecap_decay,
+                    'decay_bench': [gk_weight, first_bench_weight, second_bench_weight, third_bench_weight],
+                    'ft_val': ft_val,
+                    'itb_val': itb_val,
+                    'hit_val': hit_val,
+                    'triple_val': tc_val,
+                    'bboost_val': bb_val,
+                    'freehit_val': fh_val,
+                    'wildcard_val': wc_val,
+                }
+            )
 
             df, chip_strat, total_ev, total_obj = to.solve(
                 model_name="automated_chips",

@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import matplotlib.path as mpath
 
-from src.team_optimization import Team_Optimization
+from src.team_optimization import TeamOptimization
 
 
 @st.cache
@@ -16,7 +16,7 @@ def get_data():
         info = json.load(f)
         team_id = info['team-id']
 
-    to = Team_Optimization(
+    to = TeamOptimization(
         team_id=team_id,
         horizon=5,
         noise=False,
@@ -142,21 +142,24 @@ def write():
 
         with st.spinner("Running Optimization ..."):
 
-            to = Team_Optimization(
+            to = TeamOptimization(
                 team_id=team_id,
                 horizon=horizon,
                 noise=False,
                 premium=True if premium=='Premium' else False)
 
             to.build_model(
-                model_name="biased",
-                objective_type='decay' if decay != 0 else 'linear',
-                decay_gameweek=decay,
-                vicecap_decay=vicecap_decay,
-                decay_bench=[gk_weight, first_bench_weight, second_bench_weight, third_bench_weight],
-                ft_val=ft_val,
-                itb_val=itb_val,
-                hit_val=hit_val)
+                {
+                    'model_name': 'biased',
+                    'objective_type': 'decay' if decay != 0 else 'linear',
+                    'decay_gameweek': decay,
+                    'vicecap_decay': vicecap_decay,
+                    'decay_bench': [gk_weight, first_bench_weight, second_bench_weight, third_bench_weight],
+                    'ft_val': ft_val,
+                    'itb_val': itb_val,
+                    'hit_val': hit_val,
+                }
+            )
 
             if max_gws == 3:
                 hit_limit = [(start, hit_1), (start+1, hit_2), (start+2, hit_3)]

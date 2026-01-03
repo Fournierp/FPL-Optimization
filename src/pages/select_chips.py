@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import matplotlib.path as mpath
 
-from src.team_optimization import Team_Optimization
+from src.team_optimization import TeamOptimization
 from src.utils import get_next_gameweek
 
 def write():
@@ -83,25 +83,28 @@ def write():
                     info = json.load(f)
                     team_id = info['team-id']
 
-                to = Team_Optimization(
+                to = TeamOptimization(
                     team_id=team_id,
                     horizon=horizon,
                     noise=False,
                     premium=True if premium=='Premium' else False)
 
                 to.build_model(
-                    model_name='select_chips',
-                    freehit_gw=fh_gw-start if fh_gw is not None else -1,
-                    wildcard_gw=wc_gw-start if wc_gw is not None else -1,
-                    bboost_gw=bb_gw-start if bb_gw is not None else -1,
-                    threexc_gw=tc_gw-start if tc_gw is not None else -1,
-                    objective_type='decay' if decay != 0 else 'linear',
-                    decay_gameweek=decay,
-                    vicecap_decay=vicecap_decay,
-                    decay_bench=[gk_weight, first_bench_weight, second_bench_weight, third_bench_weight],
-                    ft_val=ft_val,
-                    itb_val=itb_val,
-                    hit_val=hit_val)
+                    {
+                        'model_name': 'select_chips',
+                        'freehit_gw': fh_gw-start if fh_gw is not None else -1,
+                        'wildcard_gw': wc_gw-start if wc_gw is not None else -1,
+                        'bboost_gw': bb_gw-start if bb_gw is not None else -1,
+                        'threexc_gw': tc_gw-start if tc_gw is not None else -1,
+                        'objective_type': 'decay' if decay != 0 else 'linear',
+                        'decay_gameweek': decay,
+                        'vicecap_decay': vicecap_decay,
+                        'decay_bench': [gk_weight, first_bench_weight, second_bench_weight, third_bench_weight],
+                        'ft_val': ft_val,
+                        'itb_val': itb_val,
+                        'hit_val': hit_val,
+                    }
+                )
 
                 df, chip_strat, total_ev, total_obj = to.solve(
                     model_name="select_chips",

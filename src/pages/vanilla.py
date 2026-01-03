@@ -7,7 +7,7 @@ import pandas as pd
 import streamlit as st
 from matplotlib import patches
 
-from src.team_optimization import Team_Optimization
+from src.team_optimization import TeamOptimization
 from src.utils import bezier_path, get_next_gameweek
 
 PROJECTIONS_PATH = Path('data/projections')
@@ -111,7 +111,7 @@ def draw_transfers(ax, team_from: pd.DataFrame, team_to: pd.DataFrame, col_from:
             transfer_ = transfer_.drop([transfer_.head(1).index[0], transfer_.tail(1).index[0]])
 
 
-def display_team_visualization(to: Team_Optimization, df: pd.DataFrame, chip_strat: list, horizon: int) -> None:
+def display_team_visualization(to: TeamOptimization, df: pd.DataFrame, chip_strat: list, horizon: int) -> None:
     fig, ax = plt.subplots(figsize=(16, 12))
     ax.set_ylim(0, 15 + 1)
     ax.set_xlim(0, (horizon + 1) * 16 + 2.5)
@@ -141,7 +141,7 @@ def display_team_visualization(to: Team_Optimization, df: pd.DataFrame, chip_str
 
 
 def run_optimization(params: dict, team_id: int, start: int, projection_data: pd.DataFrame) -> None:
-    to = Team_Optimization(
+    to = TeamOptimization(
         {
             'filter_ev': None,
             'horizon': params['horizon'],
@@ -154,19 +154,21 @@ def run_optimization(params: dict, team_id: int, start: int, projection_data: pd
     )
 
     to.build_model(
-        model_name='vanilla',
-        objective_type='decay' if params['decay'] != 0 else 'linear',
-        decay_gameweek=params['decay'],
-        vicecap_decay=params['vicecap_decay'],
-        decay_bench=[
-            params['gk_weight'],
-            params['first_bench_weight'],
-            params['second_bench_weight'],
-            params['third_bench_weight'],
-        ],
-        ft_val=params['ft_val'],
-        itb_val=params['itb_val'],
-        hit_val=params['hit_val'],
+        {
+            'model_name': 'vanilla',
+            'objective_type': 'decay' if params['decay'] != 0 else 'linear',
+            'decay_gameweek': params['decay'],
+            'vicecap_decay': params['vicecap_decay'],
+            'decay_bench': [
+                params['gk_weight'],
+                params['first_bench_weight'],
+                params['second_bench_weight'],
+                params['third_bench_weight'],
+            ],
+            'ft_val': params['ft_val'],
+            'itb_val': params['itb_val'],
+            'hit_val': params['hit_val'],
+        }
     )
 
     df, chip_strat, total_ev, total_obj = to.solve(model_name='vanilla', log=True, time_lim=0)
@@ -177,7 +179,7 @@ def run_optimization(params: dict, team_id: int, start: int, projection_data: pd
 
 def write() -> None:
     st.title('FPL - Vanilla Model')
-    st.header('Vanilla FPL Optimization.')
+    st.header('Optimization.')
 
     plt.style.use('.streamlit/style.mplstyle')
     start = get_next_gameweek()
