@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import matplotlib.path as mpath
 
-from src.team_optimization import Team_Optimization
+from src.team_optimization import TeamOptimization
 from src.utils import get_next_gameweek
 
 
@@ -69,20 +69,23 @@ def write():
             team_id = info['team-id']
 
         with st.spinner("Running Optimization ..."):
-            to = Team_Optimization(
+            to = TeamOptimization(
                 team_id=team_id,
                 horizon=horizon,
                 noise=False,
                 premium=True if premium=='Premium' else False)
 
             df, chip_strat, total_ev, total_obj = to.advanced_wildcard(
-                objective_type='decay',
-                decay_gameweek=[decay_short, decay_med, decay_long],
-                vicecap_decay=vicecap_decay,
-                decay_bench=[gk_weight, first_bench_weight, second_bench_weight, third_bench_weight],
-                ft_val=ft_val,
-                itb_val=itb_val,
-                hit_val=hit_val)
+                {
+                    'objective_type': 'decay',
+                    'decay_gameweek': [decay_short, decay_med, decay_long],
+                    'vicecap_decay': vicecap_decay,
+                    'decay_bench': [gk_weight, first_bench_weight, second_bench_weight, third_bench_weight],
+                    'ft_val': ft_val,
+                    'itb_val': itb_val,
+                    'hit_val': hit_val,
+                }
+            )
 
             col1, col2 = st.columns(2)
             with col1:
