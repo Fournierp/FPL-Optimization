@@ -23,7 +23,7 @@ def get_parameter_inputs(max_horizon: int) -> dict:
                 'Horizon', min_value=1, max_value=max_horizon, value=min(max_horizon, 5), step=1
             )
         with col2:
-            params['premium'] = st.selectbox('Data type', ['Premium', 'Free'], 0)
+            params['decay'] = st.slider('Decay rate', min_value=0.0, max_value=1.0, value=0.9, step=0.02)
 
         col1, col2, col3, col4 = st.columns(4)
         with col1:
@@ -37,16 +37,14 @@ def get_parameter_inputs(max_horizon: int) -> dict:
         with col4:
             params['third_bench_weight'] = st.slider('3rd Weight', min_value=0.01, max_value=1.0, value=0.01, step=0.02)
 
-        col1, col2, col3, col4, col5 = st.columns(5)
+        col1, col2, col3, col4 = st.columns(4)
         with col1:
-            params['decay'] = st.slider('Decay rate', min_value=0.0, max_value=1.0, value=0.9, step=0.02)
-        with col2:
             params['vicecap_decay'] = st.slider('Vicecap rate', min_value=0.0, max_value=1.0, value=0.1, step=0.02)
-        with col3:
+        with col2:
             params['ft_val'] = st.slider('FT value', min_value=0.0, max_value=5.0, value=1.5, step=0.2)
-        with col4:
+        with col3:
             params['hit_val'] = st.slider('Hit value', min_value=2.0, max_value=8.0, value=6.0, step=0.5)
-        with col5:
+        with col4:
             params['itb_val'] = st.slider('ITB value', min_value=0.0, max_value=1.0, value=0.008, step=0.02)
 
     return params
