@@ -1,6 +1,3 @@
-import json
-from pathlib import Path
-
 import matplotlib.pyplot as plt
 import pandas as pd
 import streamlit as st
@@ -86,9 +83,5 @@ def write() -> None:
     wildcard_params = get_wildcard_parameters()
 
     if st.button('Run Optimization'):
-        with Path('info.json').open() as f:
-            info = json.load(f)
-            team_id = info['team-id']
-
         with st.spinner('Running Optimization ...'):
-            run_optimization(basic_params, wildcard_params, team_id, start, projection_data)
+            run_optimization(basic_params, wildcard_params, st.session_state.fpl_team_id, start, projection_data)
