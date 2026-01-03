@@ -19,6 +19,26 @@ uv sync
 
 **Note:** Prior to running this, one should have downloaded the gameweek prediction data and saved it in folder: *data/fpl_review/SEASON/gameweek/GAMEWEEK*.
 
+### Projections CSV Format
+
+The projections CSV files (e.g., `enriched_expected_points_GW1.csv`) should be placed in the `data/projections/` directory and must follow this format:
+
+**Required Columns:**
+- `Name` - Player name (string)
+- `Position` - Player position: GK, DF, MD, or FW (string)
+- `GW{N}` - Expected points for gameweek N (float, one column per gameweek)
+- `purchase_price` - Player price in millions (float)
+- `selling_price` - Player price in millions (float)
+
+**Example:**
+```csv
+Name,Position,GW1,GW2,GW3,GW4,purchase_price,selling_price
+Haaland,FW,6.3,6.6,5.6,7.3,15.4,15.2
+Saka,MD,5.2,5.2,4.8,5.7,10,10
+```
+
+The number of `GW{N}` columns should match the planning horizon. Each row represents a single player with their projected performance across multiple gameweeks.
+
 ```{bash}
 uv run streamlit run app.py
 ```

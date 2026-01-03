@@ -74,61 +74,6 @@ def randomize(seed, df, start):
     return df
 
 
-def get_predictions(season, premium=False):
-    """ Load CSV file of EV Data
-
-    Args:
-        premium (bool, optional): Load premium data. Defaults to False.
-        season (int): Season
-
-    Returns:
-        (pd.DataFrame): EV Data
-    """
-    if premium:
-        start = get_next_gameweek()
-        path = f"../FPL/data/fpl_review/{season}-{season % 2000 + 1}/gameweek/{start}/fplreview_mp.csv"
-        assert os.path.exists(path), "The Premium Planner data is not saved in the GW folder."
-        df = pd.read_csv(path)
-
-        # One hot encoded values for the constraints
-        if df.Position.dtype == np.int:
-            df["Position"] = df["Position"].map(
-                {
-                    1: 'G',
-                    2: 'D',
-                    3: 'M',
-                    4: 'F'
-                })
-
-        df = pd.concat([df, pd.get_dummies(df.Position)], axis=1)
-        df = pd.concat([df, pd.get_dummies(df.Team)], axis=1)
-        df = df.set_index('ID')
-        df.purchase_price = df.purchase_price*10
-        df.selling_price = df.selling_price*10
-
-        return df.fillna(0)
-
-    else:
-        start = get_next_gameweek()
-        path = f"../FPL/data/fpl_review/{season}-{season % 2000 + 1}/gameweek/{start}/fplreview_fp.csv"
-        assert os.path.exists(path), "The Free Planner data is not saved in the GW folder."
-        df = pd.read_csv(path)
-        if df.Position.dtype == np.int:
-            df["Position"] = df["Position"].map(
-                {
-                    1: 'G',
-                    2: 'D',
-                    3: 'M',
-                    4: 'F'
-                })
-        # One hot encoded values for the constraints
-        df = pd.concat([df, pd.get_dummies(df.Position)], axis=1)
-        df = pd.concat([df, pd.get_dummies(df.Team)], axis=1)
-        df = df.set_index('ID')
-
-        return df.fillna(0)
-
-
 def get_transfer_history(team_id, last_gw):
     """ Load team transfer strategy data
 

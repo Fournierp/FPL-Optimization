@@ -36,7 +36,7 @@ class TeamOptimization:
         self.get_data(params['team_id'])
 
         if params['noise']:
-            self.data = randomize(42, self.data, self.start)
+            self.random_noise(42)
 
     def get_data(self, team_id: int) -> None:
         # Projection data
@@ -108,6 +108,9 @@ class TeamOptimization:
                 ),
                 ignore_index=True,
             )
+
+    def random_noise(self, seed: int | None) -> None:
+        self.data = randomize(seed, self.data, self.start)
 
     def build_model(self, params: dict) -> None:  # noqa: C901, PLR0912, PLR0915
         model_name = params.get('model_name', 'vanilla')
@@ -2954,7 +2957,7 @@ class TeamOptimization:
 
         # Reproduce the optimization from scratch
         for r in range(repeats):
-            self.build_model(**parameters)
+            self.build_model(parameters)
 
             print(f'\n----- Trial {r + 1} -----')
 
