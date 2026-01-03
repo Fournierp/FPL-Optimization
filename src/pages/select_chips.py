@@ -220,13 +220,8 @@ def write() -> None:
     chips = get_chip_parameters(start, params['horizon'])
 
     if st.button('Run Optimization'):
-        with Path('info.json').open() as f:
-            info = json.load(f)
-            team_id = info['team-id']
-
-
         with st.spinner('Running Optimization ...'):
             if not validate_chip_selection(chips['wc_gw'], chips['fh_gw'], chips['tc_gw'], chips['bb_gw']):
                 st.warning('Two chips cannot be used in the same GW')
             else:
-                run_optimization(params, chips, team_id, start, projection_data)
+                run_optimization(params, chips, st.session_state.fpl_team_id, start, projection_data)

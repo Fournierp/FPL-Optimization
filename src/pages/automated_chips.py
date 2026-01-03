@@ -82,9 +82,5 @@ def write() -> None:
     chip_vals = get_chip_value_parameters()
 
     if st.button('Run Optimization'):
-        with Path('info.json').open() as f:
-            info = json.load(f)
-            team_id = info['team-id']
-
         with st.spinner('Running Optimization ...'):
-            run_optimization(params, chip_vals, team_id, start, projection_data)
+            run_optimization(params, chip_vals, st.session_state.fpl_team_id, start, projection_data)

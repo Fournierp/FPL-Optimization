@@ -1,4 +1,3 @@
-import json
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -197,9 +196,5 @@ def write() -> None:
     params = get_basic_parameters(max_horizon)
 
     if st.button('Run Optimization'):
-        with Path('info.json').open() as f:
-            info = json.load(f)
-            team_id = info['team-id']
-
         with st.spinner('Running Optimization ...'):
-            run_optimization(params, team_id, start, projection_data)
+            run_optimization(params, st.session_state.fpl_team_id, start, projection_data)

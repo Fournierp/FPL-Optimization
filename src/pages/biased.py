@@ -152,10 +152,7 @@ def run_optimization(  # noqa: PLR0913
         hate={
             'sell': {},
             'team': (
-                [
-                    (player[0], start)
-                    for player in player_names[player_names.isin(bias_params['team_out_1'])].items()
-                ]
+                [(player[0], start) for player in player_names[player_names.isin(bias_params['team_out_1'])].items()]
                 + [
                     (player[0], start + 1)
                     for player in player_names[player_names.isin(bias_params['team_out_2'])].items()
@@ -193,11 +190,13 @@ def write() -> None:
     bias_params = get_bias_parameters(start, basic_params['horizon'], projection_data.Name)
 
     if st.button('Run Optimization'):
-        with Path('info.json').open() as f:
-            info = json.load(f)
-            team_id = info['team-id']
-
         with st.spinner('Running Optimization ...'):
             run_optimization(
-                basic_params, bias_params, team_id, start, projection_data, projection_data.Name, max_horizon
+                basic_params,
+                bias_params,
+                st.session_state.fpl_team_id,
+                start,
+                projection_data,
+                projection_data.Name,
+                max_horizon,
             )
