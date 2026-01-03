@@ -13,7 +13,7 @@ from src.utils import bezier_path, get_next_gameweek
 PROJECTIONS_PATH = Path('data/projections')
 
 
-def get_parameter_inputs(max_horizon: int) -> dict:
+def get_basic_parameters(max_horizon: int) -> dict:
     params = {}
 
     with st.expander('Parameters', expanded=True):
@@ -98,7 +98,7 @@ def draw_transfers(ax, team_from: pd.DataFrame, team_to: pd.DataFrame, col_from:
     transfers = pd.concat([team_from, team_to], ignore_index=True)[['Name', 'Position']]
     transfers = transfers.drop_duplicates(keep=False).sort_index()
 
-    for pos in ['G', 'D', 'M', 'F']:
+    for pos in ['GK', 'DF', 'MD', 'FW']:
         transfer_ = transfers.loc[transfers.Position == pos]
 
         for _ in range(int(transfer_.shape[0] / 2)):
@@ -111,7 +111,7 @@ def draw_transfers(ax, team_from: pd.DataFrame, team_to: pd.DataFrame, col_from:
             transfer_ = transfer_.drop([transfer_.head(1).index[0], transfer_.tail(1).index[0]])
 
 
-def display_team_visualization(to: TeamOptimization, df: pd.DataFrame, chip_strat: list, horizon: int) -> None:
+def display_team_visualization(initial_team_df: pd.DataFrame, planned_team_df: pd.DataFrame, chip_strat: list, horizon: int) -> None:
     fig, ax = plt.subplots(figsize=(16, 12))
     ax.set_ylim(0, 15 + 1)
     ax.set_xlim(0, (horizon + 1) * 16 + 2.5)
@@ -120,10 +120,13 @@ def display_team_visualization(to: TeamOptimization, df: pd.DataFrame, chip_stra
 
     color_position = {'GK': '#ebff00', 'DF': '#00ff87', 'MD': '#05f0ff', 'FW': '#e90052'}
 
-    draw_team_column(ax, to.initial_team_df, 0, header_pos, color_position, 'Base')
+    draw_team_column(ax, initial_team_df, 0, header_pos, color_position, 'Base')
 
-    for i, gw in enumerate(np.sort(df.GW.unique())):
-        df_gw = df.loc[gw == df.GW].reset_index(drop=True)
+    for i, gw in enumerate(np.sort(planned_team_df.GW.unique())):
+        df_gw = planned_team_df.loc[gw == planned_team_df.GW]
+        df_gw = df_gw.sort_values(by=['Position'], key=lambda x: x.map({'GK': 0, 'DF': 1, 'MD': 2, 'FW': 3}))
+        df_gw = df_gw.sort_values(by=['Start'], ascending=False)
+        df_gw = df_gw.reset_index(drop=True)
 
         draw_team_column(ax, df_gw, (i + 1) * 16, header_pos, color_position, gw)
 
@@ -131,9 +134,12 @@ def display_team_visualization(to: TeamOptimization, df: pd.DataFrame, chip_stra
             ax.text((i + 1) * 16 + 6, header_pos + 1, chip_strat[i], fontsize=14, weight='bold', ha='center')
 
         if i == 0:
-            draw_transfers(ax, to.initial_team_df, df_gw, 0, 16)
+            draw_transfers(ax, initial_team_df, df_gw, 0, 16)
         else:
-            df_prev = df.loc[gw - 1 == df.GW]
+            df_prev = planned_team_df.loc[gw - 1 == planned_team_df.GW]
+            df_prev = df_prev.sort_values(by=['Position'], key=lambda x: x.map({'GK': 0, 'DF': 1, 'MD': 2, 'FW': 3}))
+            df_prev = df_prev.sort_values(by=['Start'], ascending=False)
+            df_prev = df_prev.reset_index(drop=True)
             draw_transfers(ax, df_prev, df_gw, i * 16, (i + 1) * 16)
 
     st.pyplot(fig, ax)
@@ -174,12 +180,11 @@ def run_optimization(params: dict, team_id: int, start: int, projection_data: pd
     df, chip_strat, total_ev, total_obj = to.solve(model_name='vanilla', log=True, time_lim=0)
 
     display_metrics(total_ev, total_obj)
-    display_team_visualization(to, df, chip_strat, params['horizon'])
+    display_team_visualization(to.initial_team_df, df, chip_strat, params['horizon'])
 
 
 def write() -> None:
     st.title('FPL - Vanilla Model')
-    st.header('Optimization.')
 
     plt.style.use('.streamlit/style.mplstyle')
     start = get_next_gameweek()
@@ -189,7 +194,7 @@ def write() -> None:
 
     max_horizon = len([col for col in projection_data.columns if 'GW' in col])
 
-    params = get_parameter_inputs(max_horizon)
+    params = get_basic_parameters(max_horizon)
 
     if st.button('Run Optimization'):
         with Path('info.json').open() as f:

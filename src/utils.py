@@ -457,7 +457,6 @@ def pretty_print(
 
 
 def bezier_path(p1: tuple, p2: tuple, color: str ='white') -> patches.PathPatch:
-    # TODO: The curves are not displayed on the stremlit app
     x1, y1 = p1
     x2, y2 = p2
 

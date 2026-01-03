@@ -74,7 +74,7 @@ def match_player_names(projection_df: pd.DataFrame, team_id: int, next_gameweek:
             row,
             fpl_df.loc[
                 (fpl_df['position'] == row['POSITION'])
-                & (fpl_df['now_cost'].between(row['PRICE'] * 10 - 2, row['PRICE'] * 10 + 2))
+                & (fpl_df['now_cost'].between(row['PRICE'] * 10 - 1, row['PRICE'] * 10 + 1))
             ],
             team_prices,
         ),
@@ -123,6 +123,7 @@ def get_fpl_players() -> pd.DataFrame:
 
 
 def get_my_team_prices(team_id: int, gameweek: int) -> dict[int, dict[str, float]]:
+    # TODO: get the latest prices in the later gameweeks
     picks_res = _fetch_team_picks(team_id, gameweek)
     transfers = _fetch_transfer_history(team_id)
     bootstrap = fetch_bootstrap_data()
