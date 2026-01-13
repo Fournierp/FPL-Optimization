@@ -123,14 +123,13 @@ def get_fpl_players() -> pd.DataFrame:
 
 
 def get_my_team_prices(team_id: int, gameweek: int) -> dict[int, dict[str, float]]:
-    # TODO: get the latest prices in the later gameweeks
     picks_res = _fetch_team_picks(team_id, gameweek)
     transfers = _fetch_transfer_history(team_id)
     bootstrap = fetch_bootstrap_data()
 
     current_squad = [pick['element'] for pick in picks_res['picks']]
     purchase_prices = {}
-    for transfer in transfers:
+    for transfer in reversed(transfers):
         player_id = transfer['element_in']
         purchase_price = transfer['element_in_cost']
         purchase_prices[player_id] = purchase_price
