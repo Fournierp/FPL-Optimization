@@ -64,7 +64,7 @@ def run_optimization(
     df, chip_strat, total_ev, total_obj = to.solve(model_name='differential', log=True, time_lim=0)
 
     display_metrics(total_ev, total_obj)
-    display_team_visualization(to, df, chip_strat, basic_params['horizon'], diff_params['threshold'])
+    display_team_visualization(to.initial_team_df, df, chip_strat, basic_params['horizon'])
 
 
 def write() -> None:
