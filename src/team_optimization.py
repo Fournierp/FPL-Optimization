@@ -2820,7 +2820,7 @@ class TeamOptimization:
             nb_suboptimal=model_name,
         )
 
-    def solve(self, model_name: str, log: bool = False, i: int = 0, time_lim: int = 0) -> dict:  # noqa: FBT001, FBT002
+    def solve(self, model_name: str, log: bool = False, i: int = 0, time_lim: int = 0) -> dict:
         self.model.export_mps(filename=f'tmp/{model_name}.mps')
         if time_lim == 0:
             command = f'cbc tmp/{model_name}.mps cost column solve solu ' + f'tmp/{model_name}_solution.txt'

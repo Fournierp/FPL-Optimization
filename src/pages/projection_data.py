@@ -5,8 +5,7 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
-from src.data_collection import convert_txt_to_csv, match_player_names
-from src.utils import get_next_gameweek
+from src.utils import convert_txt_to_csv, get_next_gameweek, match_player_names
 
 PROJECTIONS_PATH = Path('data/projections')
 POSSIBLE_POSITIONS = ['GK', 'DF', 'MD', 'FW']
