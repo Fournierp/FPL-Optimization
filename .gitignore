@@ -1,2 +1,5 @@
 tmp/
 venv3/
+__pycache__/
+*.csv
+*.txt

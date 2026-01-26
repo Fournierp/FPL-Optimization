@@ -4,29 +4,43 @@
 
 Fantasy Premier League (FPL) is a popular online game where players can create their own virtual teams of real-life Premier League footballers and compete with others based on the players' real-life performances in matches. The game allows participants to select and manage a squad of 15 players. The aim of the game is to score as many points as possible by earning points for goals, assists, clean sheets and other performance-based criteria, and making strategic decisions around transfers, formations and captaincy.
 
-The idea ixed integer linear programming (MILP) can be useful in Fantasy Premier League for optimizing team selection and transfer decisions. MILP can be used to optimize transfer decisions by taking into account the potential benefits and costs associated with each transfer (like player performance history, injury status, fixture difficulty, and cost).
+The idea is that Mixed integer linear programming (MILP) can be useful in Fantasy Premier League for optimizing team selection and transfer decisions. MILP can be used to optimize transfer decisions by taking into account the potential benefits and costs associated with each transfer (like player performance history, injury status, fixture difficulty, and cost).
 
 ## Installation
 
-Firstly, ensure that you have installed python and pip. Then build you virtualenv to avoid version conflicts with other projects.
+Firstly, ensure that you have [uv](https://docs.astral.sh/uv/getting-started/installation/) installed.
 
-```{bash}
-sudo apt install python3-virtualenv
-virtualenv -p python3.10 venv3
+Install the required packages.
 ```
-
-Then install the required libraries listed in the requirements.txt
-
-```{bash}
-pip install -r requirements.txt
+uv sync
 ```
 
 ## Usage Example
 
 **Note:** Prior to running this, one should have downloaded the gameweek prediction data and saved it in folder: *data/fpl_review/SEASON/gameweek/GAMEWEEK*.
 
+### Projections CSV Format
+
+The projections CSV files (e.g., `enriched_expected_points_GW1.csv`) should be placed in the `data/projections/` directory and must follow this format:
+
+**Required Columns:**
+- `Name` - Player name (string)
+- `Position` - Player position: GK, DF, MD, or FW (string)
+- `GW{N}` - Expected points for gameweek N (float, one column per gameweek)
+- `purchase_price` - Player price in millions (float)
+- `selling_price` - Player price in millions (float)
+
+**Example:**
+```csv
+Name,Position,GW1,GW2,GW3,GW4,purchase_price,selling_price
+Haaland,FW,6.3,6.6,5.6,7.3,15.4,15.2
+Saka,MD,5.2,5.2,4.8,5.7,10,10
+```
+
+The number of `GW{N}` columns should match the planning horizon. Each row represents a single player with their projected performance across multiple gameweeks.
+
 ```{bash}
-python3 optimization/team_optimization.py
+uv run streamlit run app.py
 ```
 
 An alternative is to use the Google Colab version [here](https://colab.research.google.com/drive/1izz48YWGfsK0VBnDLlki6gDVvbvHr25I?usp=sharing).
