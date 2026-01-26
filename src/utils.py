@@ -48,16 +48,17 @@ def randomize(seed: int, projection_df: pd.DataFrame, start: int) -> pd.DataFram
 
 def get_transfer_history(team_id: int, last_gameweek: int) -> list[int]:
     transfers = []
-    # Reversing GW history until a chip is played or 2+ transfers were made
+    # Reversing GW history until a chip is played or 5+ transfers were made
     for gameweek in range(last_gameweek, 0, -1):
         team_picks = fetch_team_picks(team_id, gameweek)
         transfer = team_picks['entry_history']['event_transfers']
         chip = team_picks['active_chip']
 
         if chip is not None and chip not in {'3xc', 'bboost'}:
-            transfer = 2
+            transfer = 5
         transfers.append(transfer)
-        if transfer > 1:
+        max_transfers_to_consider_for_reset = 4
+        if transfer > max_transfers_to_consider_for_reset:
             break
 
     return transfers
@@ -71,15 +72,14 @@ def get_rolling(team_id: int, last_gameweek: int) -> tuple[int, int]:
     rolling = 0
     for transfer in reversed(transfers):
         # Transfer logic
-        rolling = min(max(rolling + 1 - transfer, 0), 1)
+        rolling = min(max(rolling + 1 - transfer, 0), 5)
 
     return rolling, transfers[0]
 
 
 def get_chips(team_id: int, last_gameweek: int) -> tuple[int, int, int, int]:
     freehit, wildcard, bboost, threexc = 0, 0, 0, 0
-    fh_count = 0
-    # Reversing GW history until a chip is played or 2+ transfers were made
+
     for gameweek in range(last_gameweek, 0, -1):
         team_picks = fetch_team_picks(team_id, gameweek)
         chip = team_picks['active_chip']
@@ -88,16 +88,18 @@ def get_chips(team_id: int, last_gameweek: int) -> tuple[int, int, int, int]:
             threexc = gameweek
         if chip == 'bboost':
             bboost = gameweek
-        if chip == 'wildcard' and wildcard == 0:
+        if chip == 'wildcard':
             wildcard = gameweek
         if chip == 'freehit':
             freehit = gameweek
-            fh_count += 1
 
     # Handle the WC reset at GW 20
     reset_gameweek = 20
-    if wildcard <= reset_gameweek and last_gameweek >= reset_gameweek:
-        wildcard = 0
+    if last_gameweek >= reset_gameweek:
+        wildcard = 0 if wildcard <= reset_gameweek else wildcard
+        freehit = 0 if freehit <= reset_gameweek else freehit
+        threexc = 0 if threexc <= reset_gameweek else threexc
+        bboost = 0 if bboost <= reset_gameweek else bboost
 
     return freehit, wildcard, bboost, threexc
 
