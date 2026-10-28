@@ -9,6 +9,7 @@ dependencies = [
     "matplotlib>=3.10.7",
     "numpy>=2.3.5",
     "pandas>=2.3.3",
+    "pillow>=13.0.0",
     "sasoptpy>=1.0.5",
     "streamlit>=1.51.0",
 ]
